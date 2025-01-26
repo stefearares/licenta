@@ -92,7 +92,19 @@ def create_binary_image_mean_threshold(array_index):
     return binary_mask_inverted.astype(np.uint8) * 255
 
 
-def kmeans_clustering(normalized_index, n_clusters):
+def kmeans_clustering_pp_centers(normalized_index, n_clusters):
+    pixels = normalized_index.reshape(-1, 1).astype(np.float32)
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
+    _, labels, centers = cv2.kmeans(pixels, n_clusters, None, criteria, 10, cv2.KMEANS_PP_CENTERS)
+    segmented_image = labels.reshape(normalized_index.shape)
+    # Identify the cluster corresponding to desert regions
+    # Assuming the desert regions are the brighter cluster
+    desert_cluster = np.argmax(centers)
+    desert_regions = (segmented_image == desert_cluster).astype(np.uint8) * 255
+    return desert_regions
+
+
+def kmeans_clustering_random_centers(normalized_index, n_clusters):
     pixels = normalized_index.reshape(-1, 1).astype(np.float32)
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
     _, labels, centers = cv2.kmeans(pixels, n_clusters, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
@@ -101,6 +113,7 @@ def kmeans_clustering(normalized_index, n_clusters):
     # Assuming the desert regions are the brighter cluster
     desert_cluster = np.argmax(centers)
     desert_regions = (segmented_image == desert_cluster).astype(np.uint8) * 255
+    return desert_regions
 
 
 def plotting(array_to_plot, title):
@@ -109,13 +122,20 @@ def plotting(array_to_plot, title):
     plt.show()
 
 
+def pixel_count(array_to_count):
+    # Count the number of black pixels (value 1)
+    black_pixels = np.sum(array_to_count == 0)
+
+    return black_pixels
+
+
 # Paths to the necessary bands
-blue_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B02-Const.jpg"  # Blue band
-red_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B04-Const.jpg"  # Red band (or VRE if available)
-swir1_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B11-Const.jpg"  # SWIR1 band
-swir2_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B12-Const.jpg"  # SWIR2 band
-green_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B03-Const.jpg"
-nir_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B08-Const.jpg"
+blue_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B02-Dolj.jpg"  # Blue band
+red_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B04-Dolj.jpg"  # Red band (or VRE if available)
+swir1_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B11-Dolj.jpg"  # SWIR1 band
+swir2_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B12-Dolj.jpg"  # SWIR2 band
+green_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B03-Dolj.jpg"
+nir_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B08-Dolj.jpg"
 blue_array, red_array, swir1_array, swir2_array, green_array, nir_array = initialize_bands(blue_band_path,
                                                                                            green_band_path,
                                                                                            red_band_path,
@@ -126,9 +146,12 @@ blue_array, red_array, swir1_array, swir2_array, green_array, nir_array = initia
 ndesi_index = compute_ndesi(blue_array, red_array, swir1_array, swir2_array)
 #normalized_nsi = normalize_arrays(nsi_index)
 normalized_ndesi = normalize_arrays(ndesi_index)
-ndwi_index = compute_ndwi(green_array, nir_array)
 binary_ndesi = create_binary_image_mean_threshold(ndesi_index)
-ndesi_no_water = ndesi_minus_ndwi(ndwi_index, binary_ndesi)
-
 plotting(binary_ndesi, "Binary NDESI")
-plotting(ndesi_no_water,"Ndesi with no water")
+desert_mask = kmeans_clustering_random_centers(normalized_ndesi, n_clusters=2)
+desert_mask2 = kmeans_clustering_pp_centers(normalized_ndesi, n_clusters=2)
+plotting(desert_mask, "Desert Regions Detected via K-Means random")
+plotting(desert_mask2, "Desert Regions Detected via K-Means pp")
+print("Mean threshold", pixel_count(binary_ndesi))
+print("K random threshold", pixel_count(desert_mask))
+print("K pp threshold", pixel_count(desert_mask2))
