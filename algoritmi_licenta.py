@@ -71,7 +71,7 @@ def normalize_arrays(index_array):
 
 def create_binary_image_user_defined_threshold(array_index, threshold):
     # Apply a threshold to get a binary mask: values above the threshold are 1 (black), others are 0 (white)
-    binary_mask = np.where(ndesi_index > threshold, 1, 0)
+    binary_mask = np.where(array_index > threshold, 1, 0)
 
     # Invert the binary mask so that 0 becomes white and 1 becomes black
     binary_mask_inverted = 1 - binary_mask
@@ -81,10 +81,10 @@ def create_binary_image_user_defined_threshold(array_index, threshold):
 
 def create_binary_image_mean_threshold(array_index):
     # Calculate the mean value of NDESI
-    mean_value = np.mean(ndesi_index)
+    mean_value = np.mean(array_index)
 
     # Apply the threshold based on the mean value
-    binary_mask = np.where(ndesi_index > mean_value, 1, 0)
+    binary_mask = np.where(array_index > mean_value, 1, 0)
 
     # Invert the binary mask: 0 becomes white, 1 becomes black
     binary_mask_inverted = 1 - binary_mask
@@ -128,30 +128,3 @@ def pixel_count(array_to_count):
 
     return black_pixels
 
-
-# Paths to the necessary bands
-blue_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B02-Dolj.jpg"  # Blue band
-red_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B04-Dolj.jpg"  # Red band (or VRE if available)
-swir1_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B11-Dolj.jpg"  # SWIR1 band
-swir2_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B12-Dolj.jpg"  # SWIR2 band
-green_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B03-Dolj.jpg"
-nir_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B08-Dolj.jpg"
-blue_array, red_array, swir1_array, swir2_array, green_array, nir_array = initialize_bands(blue_band_path,
-                                                                                           green_band_path,
-                                                                                           red_band_path,
-                                                                                           swir1_band_path,
-                                                                                           swir2_band_path,
-                                                                                           nir_band_path)
-#nsi_index = compute_nsi(green_array, red_array, swir1_array)
-ndesi_index = compute_ndesi(blue_array, red_array, swir1_array, swir2_array)
-#normalized_nsi = normalize_arrays(nsi_index)
-normalized_ndesi = normalize_arrays(ndesi_index)
-binary_ndesi = create_binary_image_mean_threshold(ndesi_index)
-plotting(binary_ndesi, "Binary NDESI")
-desert_mask = kmeans_clustering_random_centers(normalized_ndesi, n_clusters=2)
-desert_mask2 = kmeans_clustering_pp_centers(normalized_ndesi, n_clusters=2)
-plotting(desert_mask, "Desert Regions Detected via K-Means random")
-plotting(desert_mask2, "Desert Regions Detected via K-Means pp")
-print("Mean threshold", pixel_count(binary_ndesi))
-print("K random threshold", pixel_count(desert_mask))
-print("K pp threshold", pixel_count(desert_mask2))
