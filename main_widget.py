@@ -1,6 +1,6 @@
 import os
 from PySide6.QtWidgets import QWidget, QTableWidget, QHeaderView, QTableWidgetItem, QHBoxLayout, QPushButton, \
-    QVBoxLayout, QLineEdit, QFormLayout, QMessageBox
+    QVBoxLayout, QLineEdit, QFormLayout, QMessageBox, QLabel
 from algoritmi_licenta import *
 from dialog_box import DialogBox
 
@@ -9,13 +9,28 @@ class Widget(QWidget):
     def __init__(self):
         super().__init__()
 
-        # Left (Table)
-        self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["Year", "Mean Pixels", "NSI", "NDESI", "Threshold"])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        # Left (Tables for NSI and NDESI)
+        self.table_layout = QVBoxLayout()
 
-        # Right (Controls)
+        self.nsi_title = QLabel("NSI Table")
+        self.table_layout.addWidget(self.nsi_title)
+
+        self.table_nsi = QTableWidget()
+        self.table_nsi.setColumnCount(6)
+        self.table_nsi.setHorizontalHeaderLabels(["Year", "Mean","K++","Krand" ,"Manual", "Threshold"])
+        self.table_nsi.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table_layout.addWidget(self.table_nsi)
+
+        self.ndesi_title = QLabel("NDESI Table")
+        self.table_layout.addWidget(self.ndesi_title)
+
+        self.table_ndesi = QTableWidget()
+        self.table_ndesi.setColumnCount(6)
+        self.table_ndesi.setHorizontalHeaderLabels(["Year", "Mean","K++","K-rand" ,"Manual", "Threshold"])
+        self.table_ndesi.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table_layout.addWidget(self.table_ndesi)
+
+        # Right (Controls & Plotting)
         self.year_input = QLineEdit()
         self.manual_threshold = QLineEdit()
         self.future_year = QLineEdit()
@@ -23,6 +38,7 @@ class Widget(QWidget):
         self.directory_button = QPushButton("Add New Year")
         self.delete_button = QPushButton("Delete Selected Row")
         self.export = QPushButton("Export Data")
+
         # Connect Button Click
         self.directory_button.clicked.connect(self.button_clicked)
         self.delete_button.clicked.connect(self.delete_selected_row)
@@ -48,11 +64,14 @@ class Widget(QWidget):
         self.right.addLayout(buttons_layout)  # Add Current & Future buttons
         self.right.addWidget(self.directory_button)  # "Add New Year" button
         self.right.addWidget(self.delete_button)  # Delete Selected Row button
-        self.right.addWidget(self.export)
-        # Main Layout
+        self.right.addWidget(self.export)  # Export Data button
+
+
+        # Main Layout (Left and Right sides)
         self.layout = QHBoxLayout(self)
-        self.layout.addWidget(self.table)
-        self.layout.addLayout(self.right)
+        self.layout.addLayout(self.table_layout)  # Add vertical table layout on the left
+        self.layout.addLayout(self.right)  # Add controls and plotting on the right
+
 
     def check_and_load_images(self, directory):
         required_bands = ['B02', 'B03', 'B04', 'B08', 'B11', 'B12', 'SWIR']
@@ -101,8 +120,6 @@ class Widget(QWidget):
         return blue_array, red_array, swir1_array, swir2_array, green_array, nir_array, swir_array
 
     def button_clicked(self):
-        print("Button clicked!")
-
         dlg = DialogBox()
         if dlg.exec():
             year = dlg.year_input.text().strip()  # Get year from dialog
@@ -114,20 +131,30 @@ class Widget(QWidget):
                 band_arrays = self.check_and_load_images(directory)
 
                 if band_arrays:
-                    blue_array,red_array, swir1_array, swir2_array,green_array,nir_array, swir_array = band_arrays
-                    # Now you can compute the indices, e.g., NSI, NDESI
-                    nsi_index = compute_nsi(green_array, red_array, swir1_array)
-                    ndesi_index = compute_ndesi(blue_array, red_array, swir1_array, swir2_array)
-                    binary_ndesi= create_binary_image_mean_threshold(ndesi_index)
-                    print("Mean threshold", pixel_count(binary_ndesi))
-                    # Insert new row into the table
-                    row_position = self.table.rowCount()
-                    self.table.insertRow(row_position)
+                    blue_array, red_array, swir1_array, swir2_array, green_array, nir_array, swir_array = band_arrays
 
-                    # Set the year in the first column
-                    self.table.setItem(row_position, 0, QTableWidgetItem(year))
-                    self.table.setItem(row_position, 4, QTableWidgetItem(threshold))
-                    print(f"Added Year: {year} | Threshold: {threshold}| Directory: {directory}")
+                    # Compute indices for NSI and NDESI
+                    nsi_index = compute_nsi(green_array, red_array, swir1_array)
+                    binary_nsi = create_binary_image_mean_threshold(nsi_index)
+                    ndesi_index = compute_ndesi(blue_array, red_array, swir1_array, swir2_array)
+                    binary_ndesi = create_binary_image_mean_threshold(ndesi_index)
+
+                    # Add to NSI Table
+                    row_position_nsi = self.table_nsi.rowCount()
+                    self.table_nsi.insertRow(row_position_nsi)
+                    self.table_nsi.setItem(row_position_nsi, 0, QTableWidgetItem(year))
+                    self.table_nsi.setItem(row_position_nsi, 1, QTableWidgetItem(str(int(pixel_count(binary_nsi)))))
+                    self.table_nsi.setItem(row_position_nsi, 3, QTableWidgetItem(threshold))
+
+                    # Add to NDESI Table
+                    row_position_ndesi = self.table_ndesi.rowCount()
+                    self.table_ndesi.insertRow(row_position_ndesi)
+                    self.table_ndesi.setItem(row_position_ndesi, 0, QTableWidgetItem(year))
+                    self.table_ndesi.setItem(row_position_ndesi, 1, QTableWidgetItem(str(int(pixel_count(binary_ndesi)))))
+                    self.table_ndesi.setItem(row_position_ndesi, 3, QTableWidgetItem(threshold))
+
+                    print(f"Added Year: {year} | Threshold: {threshold} | Directory: {directory}")
+
                 else:
                     print("Error loading images from the directory.")
             else:
@@ -135,26 +162,20 @@ class Widget(QWidget):
         else:
             print("Cancel!")
 
-
     def delete_selected_row(self):
-        """Deletes the selected rows in the table with a confirmation dialog"""
-        selected_rows = self.table.selectionModel().selectedRows()
+        """Deletes the selected rows in both tables"""
+        selected_rows_nsi = self.table_nsi.selectionModel().selectedRows()
+        selected_rows_ndesi = self.table_ndesi.selectionModel().selectedRows()
 
-        if selected_rows:
-            # Show a confirmation dialog
-            reply = QMessageBox.question(self, 'Confirm Delete',
-                                         'Are you sure you want to delete the selected row(s)?',
-                                         QMessageBox.Yes | QMessageBox.No,
-                                         QMessageBox.No)
+        if selected_rows_nsi:
+            for row in reversed(selected_rows_nsi):
+                self.table_nsi.removeRow(row.row())
 
-            if reply == QMessageBox.Yes:
-                for row in reversed(selected_rows):  # Remove rows in reverse order to avoid shifting rows
-                    self.table.removeRow(row.row())
-                print("Selected rows deleted!")
-            else:
-                print("Delete action canceled.")
-        else:
-            print("No row selected!")
+        if selected_rows_ndesi:
+            for row in reversed(selected_rows_ndesi):
+                self.table_ndesi.removeRow(row.row())
+
+        print("Selected rows deleted!")
 
     def toggle_buttons(self):
         sender = self.sender()
