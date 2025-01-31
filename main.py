@@ -1,16 +1,14 @@
-# Sys processes CLI and sends them to the QApplication
 import sys
-from PySide6.QtWidgets import QApplication, QWidget, QMainWindow, QPushButton, QLabel, QLineEdit, QFileDialog, \
-    QMessageBox
+from PySide6.QtWidgets import QApplication
 from algoritmi_licenta import *
 from main_window import MainWindow
 from main_widget import Widget
+
 if __name__ == '__main__':
 
     app = QApplication(sys.argv)
     widget=Widget()
     window = MainWindow(widget)
-
     window.show()
     sys.exit(app.exec())
 
@@ -32,6 +30,7 @@ if __name__ == '__main__':
         nir_band_path, swir_band_path)
     nsi_index = compute_nsi(green_array, red_array, swir1_array)
     ndesi_index = compute_ndesi(blue_array, red_array, swir1_array, swir2_array)
+    normalized_nsi=normalize_arrays(nsi_index)
     binary_nsi = create_binary_image_mean_threshold(nsi_index)
     normalized_ndesi = normalize_arrays(ndesi_index)
     binary_ndesi = create_binary_image_mean_threshold(ndesi_index)
@@ -39,9 +38,15 @@ if __name__ == '__main__':
     plotting(binary_nsi, "Binary NSI")
     desert_mask = kmeans_clustering_random_centers(normalized_ndesi, n_clusters=2)
     desert_mask2 = kmeans_clustering_pp_centers(normalized_ndesi, n_clusters=2)
-    plotting(desert_mask, "Desert Regions Detected via K-Means random")
+    desert_mask3= kmeans_clustering_pp_centers(normalized_nsi, n_clusters=2)
+    desert_mask4= kmeans_clustering_random_centers(normalized_nsi, n_clusters=2)
 
+    plotting(desert_mask, "Desert Regions Detected via K-Means random")
     plotting(desert_mask2, "Desert Regions Detected via K-Means pp")
+    plotting(desert_mask3, "NSI Desert Regions Detected via K-Means random")
+    plotting(desert_mask4, "NSI Desert Regions Detected via K-Means pp")
+    print("K NSI random threshold", pixel_count(desert_mask3))
+    print("K NSI pp threshold", pixel_count(desert_mask4))
     print("Mean threshold", pixel_count(binary_ndesi))
     print("NSI index", pixel_count(binary_nsi))
     print("K random threshold", pixel_count(desert_mask))
