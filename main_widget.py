@@ -19,7 +19,7 @@ class Widget(QWidget):
 
         self.table_nsi = QTableWidget()
         self.table_nsi.setColumnCount(6)
-        self.table_nsi.setHorizontalHeaderLabels(["Year", "Mean", "K++", "Krand", "Manual", "Threshold"])
+        self.table_nsi.setHorizontalHeaderLabels(["Year", "Mean", "K++", "K-rand", "Manual", "Threshold"])
         self.table_nsi.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table_layout.addWidget(self.table_nsi)
 
@@ -104,7 +104,6 @@ class Widget(QWidget):
         swir1_band = band_paths.get('B11')
         swir2_band = band_paths.get('B12')
         swir_band = band_paths.get('SWIR')
-        print(band_paths.get('B02'))
 
         if None in [blue_band, green_band, red_band, nir_band, swir1_band, swir2_band, swir_band]:
             print("One or more required bands could not be loaded.")
@@ -133,64 +132,46 @@ class Widget(QWidget):
 
                 if band_arrays:
                     blue_array, red_array, swir1_array, swir2_array, green_array, nir_array, swir_array = band_arrays
+                    for i in range(3):
 
-                    # Compute NSI first
-                    nsi_index = compute_nsi(green_array, red_array, swir1_array)
-                    binary_nsi = create_binary_image_mean_threshold(nsi_index)
-                    normalized_nsi = normalize_arrays(nsi_index)
-                    desert_mask_nsi_1 = kmeans_clustering_random_centers(normalized_nsi, n_clusters=2)
-                    desert_mask_nsi_2 = kmeans_clustering_pp_centers(normalized_nsi, n_clusters=2)
-                    user_defined=create_binary_image_user_defined_threshold(normalized_nsi, int(threshold))
-                    otsu_nsi=create_binary_image_otsu_threshold(nsi_index)
-                    # Compute pixel counts for NSI first
-                    pixel_nsi_mean = int(pixel_count(binary_nsi))
-                    pixel_nsi_kpp = int(pixel_count(desert_mask_nsi_2))
-                    pixel_nsi_krand = int(pixel_count(desert_mask_nsi_1))
-                    pixel_nsi_manual = int(pixel_count(user_defined))
-                    pixel_otsu_nsi=int(pixel_count(otsu_nsi))
-                    print("Pixel NSI KPP",pixel_nsi_kpp)
-                    print("Pixel NSI KRAND",pixel_nsi_krand)
-                    print("Pixel Otsu Nsi", pixel_otsu_nsi)
+                        nsi_index = compute_nsi(green_array, red_array, swir1_array)
+                        binary_nsi = create_binary_image_mean_threshold(nsi_index)
+                        normalized_nsi = normalize_arrays(nsi_index)
+                        desert_mask_nsi_1 = kmeans_clustering_random_centers(normalized_nsi, n_clusters=2)
+                        desert_mask_nsi_2 = kmeans_clustering_pp_centers(normalized_nsi, n_clusters=2)
+                        user_defined_nsi = create_binary_image_user_defined_threshold(normalized_nsi, int(threshold))
+                        otsu_nsi = create_binary_image_otsu_threshold(nsi_index)
+
+                        ndesi_index = compute_ndesi(blue_array, red_array, swir1_array, swir2_array)
+                        binary_ndesi = create_binary_image_mean_threshold(ndesi_index)
+                        normalized_ndesi = normalize_arrays(ndesi_index)
+                        user_defined_ndesi = create_binary_image_user_defined_threshold(normalized_ndesi, int(threshold))
+                        otsu_ndesi = create_binary_image_otsu_threshold(ndesi_index)
+                        desert_mask_ndesi_1 = kmeans_clustering_random_centers(normalized_ndesi, n_clusters=2)
+                        desert_mask_ndesi_2 = kmeans_clustering_pp_centers(normalized_ndesi, n_clusters=2)
+
+
                     # Insert into NSI Table
                     row_position_nsi = self.table_nsi.rowCount()
                     self.table_nsi.insertRow(row_position_nsi)
                     self.table_nsi.setItem(row_position_nsi, 0, QTableWidgetItem(year))
-                    self.table_nsi.setItem(row_position_nsi, 1, QTableWidgetItem(str(pixel_nsi_mean)))
-                    self.table_nsi.setItem(row_position_nsi, 2, QTableWidgetItem(str(pixel_nsi_kpp)))
-                    self.table_nsi.setItem(row_position_nsi, 3, QTableWidgetItem(str(pixel_nsi_krand)))
-                    self.table_nsi.setItem(row_position_nsi, 4, QTableWidgetItem(str(pixel_nsi_manual)))
+                    self.table_nsi.setItem(row_position_nsi, 1, QTableWidgetItem(str(int(pixel_count(binary_nsi)))))
+                    self.table_nsi.setItem(row_position_nsi, 2, QTableWidgetItem(str(int(pixel_count(desert_mask_nsi_2)))))
+                    self.table_nsi.setItem(row_position_nsi, 3, QTableWidgetItem(str(int(pixel_count(desert_mask_nsi_1)))))
+                    self.table_nsi.setItem(row_position_nsi, 4, QTableWidgetItem(str(int(pixel_count(user_defined_nsi)))))
                     self.table_nsi.setItem(row_position_nsi, 5, QTableWidgetItem(threshold))
 
-
                     gc.collect()
-                    # Now compute NDESI and ensure no overlap with NSI computation
-                    ndesi_index = compute_ndesi(blue_array, red_array, swir1_array, swir2_array)
-                    binary_ndesi = create_binary_image_mean_threshold(ndesi_index)
-                    normalized_ndesi = normalize_arrays(ndesi_index)
-                    desert_mask_ndesi_1 = kmeans_clustering_random_centers(normalized_ndesi, n_clusters=2)
-                    desert_mask_ndesi_2 = kmeans_clustering_pp_centers(normalized_ndesi, n_clusters=2)
-                    user_defined=create_binary_image_user_defined_threshold(normalized_ndesi, int(threshold))
-                    otsu_ndesi=create_binary_image_otsu_threshold(ndesi_index)
 
-                    # Compute pixel counts for NDESI
-                    pixel_ndesi_mean = int(pixel_count(binary_ndesi))
-                    pixel_ndesi_kpp = int(pixel_count(desert_mask_ndesi_2))
-                    pixel_ndesi_krand = int(pixel_count(desert_mask_ndesi_1))
-                    pixel_user_defined=int(pixel_count(user_defined))
-                    pixel_otsu_ndesi=int(pixel_count(otsu_ndesi))
-                    print("Pixel NDesi KPP",pixel_ndesi_kpp)
-                    print("Pixel NDesi KRAND",pixel_ndesi_krand)
-                    print("Pixel Otsu NDesi",pixel_otsu_ndesi)
                     # Insert into NDESI Table
                     row_position_ndesi = self.table_ndesi.rowCount()
                     self.table_ndesi.insertRow(row_position_ndesi)
                     self.table_ndesi.setItem(row_position_ndesi, 0, QTableWidgetItem(year))
-                    self.table_ndesi.setItem(row_position_ndesi, 1, QTableWidgetItem(str(pixel_ndesi_mean)))
-                    self.table_ndesi.setItem(row_position_ndesi, 2, QTableWidgetItem(str(pixel_ndesi_kpp)))
-                    self.table_ndesi.setItem(row_position_ndesi, 3, QTableWidgetItem(str(pixel_ndesi_krand)))
-                    self.table_ndesi.setItem(row_position_ndesi, 4, QTableWidgetItem(str(pixel_user_defined)))
+                    self.table_ndesi.setItem(row_position_ndesi, 1, QTableWidgetItem(str(int(pixel_count(binary_ndesi)))))
+                    self.table_ndesi.setItem(row_position_ndesi, 2, QTableWidgetItem(str(int(pixel_count(desert_mask_ndesi_2)))))
+                    self.table_ndesi.setItem(row_position_ndesi, 3, QTableWidgetItem(str(int(pixel_count(desert_mask_ndesi_1)))))
+                    self.table_ndesi.setItem(row_position_ndesi, 4, QTableWidgetItem(str(int(pixel_count(user_defined_ndesi)))))
                     self.table_ndesi.setItem(row_position_ndesi, 5, QTableWidgetItem(threshold))
-
 
                     print(f"Added Year: {year} | Threshold: {threshold} | Directory: {directory}")
                 else:
