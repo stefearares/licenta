@@ -1,7 +1,14 @@
+import os
+import zipfile
 import cv2
 import numpy as np
 import matplotlib
-import rasterio
+import shutil
+import xml.etree.ElementTree as ET
+from datetime import datetime
+import csv
+import json
+import tempfile
 
 matplotlib.use('QtAgg')
 import matplotlib.pyplot as plt
@@ -40,6 +47,7 @@ def initialize_bands(blue_band_path, green_band_path, red_band_path, swir1_band_
 def compute_nsi(green_array, red_array, swir1_array):
     swir1_safe = np.where(swir1_array > 1, swir1_array, 1.01)
 
+    #nsi_index = (green_array + red_array) / np.log1p(swir1_array)
     nsi_index = (green_array + red_array) / np.log(swir1_safe)
     nsi_index = np.nan_to_num(nsi_index, nan=0.1, posinf=0.1, neginf=0.1)
     #O trebuit sa dau clip la valori ca erau un range prea urias pt Kmeans si le am redus logaritmic
@@ -51,6 +59,8 @@ def compute_ndesi(blue_array, red_array, swir1_array, swir2_array):
     ndesi = ((blue_array - red_array) * (swir1_array - swir2_array)) / \
             ((blue_array + red_array) * (swir1_array + swir2_array))
     ndesi = np.nan_to_num(ndesi, nan=0.1, posinf=0.1, neginf=0.1)
+    #Poate trebuie scos, reduce variatiile mari de date la Kmeans si la AI cica , ramane de testat
+    ndesi = np.log1p(ndesi)
 
     return ndesi
 
@@ -137,4 +147,178 @@ def pixel_count(array_to_count):
     # Count the number of desert zones white(1) the rest should be 0( because 1*255 =255 and 0*255=0)
     black_pixels = np.sum(array_to_count == 0)
 
-    return black_pixels
+    return int(black_pixels)
+
+results = []
+
+def unzip_safe(zip_path, output_root):
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            zip_ref.extractall(temp_dir)
+
+            for entry in os.listdir(temp_dir):
+                if entry.endswith(".SAFE"):
+                    extracted_path = os.path.join(temp_dir, entry)
+                    final_path = os.path.join(output_root, entry)
+
+                    if os.path.exists(final_path):
+                        shutil.rmtree(final_path)
+
+                    shutil.move(extracted_path, final_path)
+                    print(f"Unzipped and moved: {zip_path} → {final_path}")
+                    return final_path
+
+            raise FileNotFoundError("No .SAFE folder found in the ZIP archive.")
+
+
+def find_metadata_file(root_folder):
+    for root, dirs, files in os.walk(root_folder):
+        for file in files:
+            if file.startswith('MTD_MSIL') and file.endswith('.xml'):
+                return os.path.join(root, file)
+    raise FileNotFoundError("Metadata file not found.")
+
+def parse_metadata(metadata_path):
+    try:
+        tree = ET.parse(metadata_path)
+        root = tree.getroot()
+
+        # Auto-detect namespace
+        ns_match = root.tag[root.tag.find("{")+1:root.tag.find("}")]
+        ns = {'n1': ns_match}
+
+        # Try to get PRODUCT_START_TIME
+        start_elem = root.find('.//n1:PRODUCT_START_TIME', ns)
+        if start_elem is not None and start_elem.text:
+            return datetime.strptime(start_elem.text, "%Y-%m-%dT%H:%M:%S.%fZ")
+
+        safe_folder = os.path.dirname(metadata_path)
+        basename = os.path.basename(safe_folder)
+        date_str = basename.split('_')[2]  # e.g., 20161031T092122
+        year = int(date_str[:4])
+        month = int(date_str[4:6])
+        day = int(date_str[6:8])
+        return datetime(year, month, day)
+
+    except Exception as e:
+        print(f" Error parsing  at {metadata_path}: {e}")
+
+
+def find_band_paths(root_folder):
+    band_paths = {
+        'B02': None, 'B03': None, 'B04': None,
+        'B8A': None, 'B11': None, 'B12': None, 'B08': None
+    }
+    for root, dirs, files in os.walk(root_folder):
+        for file in files:
+            if file.endswith('.jp2'):
+                for band in band_paths.keys():
+                    if f'_{band}_' in file:
+                        band_paths[band] = os.path.join(root, file)
+    if None in band_paths.values():
+        missing = [k for k, v in band_paths.items() if v is None]
+        raise ValueError(f"Missing bands: {missing}")
+    return band_paths
+
+def process_sentinel_product(safe_folder, user_defined_threshold):
+    try:
+        metadata_path = find_metadata_file(safe_folder)
+        acquisition_date = parse_metadata(metadata_path)
+    except FileNotFoundError as e:
+        raise RuntimeError(f"Metadata not found in {safe_folder}") from e
+
+    year = acquisition_date.year
+
+    try:
+        band_paths = find_band_paths(safe_folder)
+    except ValueError as e:
+        raise RuntimeError(f"Band paths incomplete in {safe_folder}: {e}") from e
+
+    blue, green, red, swir1, swir2, nir, swir = initialize_bands(
+        band_paths['B02'], band_paths['B03'], band_paths['B04'],
+        band_paths['B11'], band_paths['B12'], band_paths['B08'],
+        band_paths['B8A']
+    )
+
+
+    nsi   = compute_nsi(green, red, swir1)
+    ndesi = compute_ndesi(blue, red, swir1, swir2)
+
+    # normalize for k-means
+    norm_nsi   = normalize_arrays(nsi)
+    norm_ndesi = normalize_arrays(ndesi)
+
+    # user-defined threshold masks
+    ud_nsi   = pixel_count(create_binary_image_user_defined_threshold(nsi,   user_defined_threshold))
+    ud_ndesi = pixel_count(create_binary_image_user_defined_threshold(ndesi, user_defined_threshold))
+
+    results.append({
+        'year': year,
+        # NSI
+        'nsi_mean':          pixel_count(create_binary_image_mean_threshold(nsi)),
+        'nsi_otsu':          pixel_count(create_binary_image_otsu_threshold(nsi)),
+        'nsi_kmeans_random': pixel_count(kmeans_clustering_random_centers(norm_nsi,   2)),
+        'nsi_kmeans_pp':     pixel_count(kmeans_clustering_pp_centers(    norm_nsi,   2)),
+        'nsi_user_defined':  ud_nsi,
+        # NDESI
+        'ndesi_mean':          pixel_count(create_binary_image_mean_threshold(ndesi)),
+        'ndesi_otsu':          pixel_count(create_binary_image_otsu_threshold(ndesi)),
+        'ndesi_kmeans_random': pixel_count(kmeans_clustering_random_centers(norm_ndesi, 2)),
+        'ndesi_kmeans_pp':     pixel_count(kmeans_clustering_pp_centers(    norm_ndesi, 2)),
+        'ndesi_user_defined':  ud_ndesi,
+    })
+
+    print(f"Processed {safe_folder}: Year {year}")
+
+def process_folder(folder_path, user_defined_threshold):
+    print(f"Walking folder: {folder_path}")
+    for file_name in os.listdir(folder_path):
+        full_path = os.path.join(folder_path, file_name)
+
+        # --- ZIP handling temporarily disabled ---
+        # if file_name.lower().endswith('.safe.zip'):
+        #     print(f"   Found zipped SAFE: {file_name}")
+        #     try:
+        #         extracted_path = unzip_safe(full_path, folder_path)
+        #         process_sentinel_product(extracted_path, user_defined_threshold)
+        #     except Exception as e:
+        #         print(f"  ERROR while processing {file_name}: {e}")
+
+        # Handle already extracted .SAFE folders
+        if file_name.lower().endswith('.safe') and os.path.isdir(full_path):
+            print(f"   Found extracted SAFE folder: {file_name}")
+            try:
+                process_sentinel_product(full_path, user_defined_threshold)
+            except Exception as e:
+                print(f"     Error trying to process {file_name}: {e}")
+
+        else:
+            print(f"   Skipped: {file_name} not .SAFE")
+
+    print("\nFinal Results contents:")
+    for entry in results:
+        # adjust this to whatever fields you want to show:
+        print(
+            f"Year: {entry['year']}, "
+            f"NSI_mean: {entry['nsi_mean']}, NSI_otsu: {entry['nsi_otsu']}, "
+            f"NSI_km_pp: {entry['nsi_kmeans_pp']}, NSI_km_rand: {entry['nsi_kmeans_random']}, NSI_ud: {entry['nsi_user_defined']}; "
+            f"NDESI_mean: {entry['ndesi_mean']}, NDESI_otsu: {entry['ndesi_otsu']}, "
+            f"NDESI_km_pp: {entry['ndesi_kmeans_pp']}, NDESI_km_rand: {entry['ndesi_kmeans_random']}, NDESI_ud: {entry['ndesi_user_defined']}"
+        )
+
+
+
+def export_results(results, output_folder):
+    os.makedirs(output_folder, exist_ok=True)
+
+    csv_path = os.path.join(output_folder, 'results.csv')
+    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=(list(results[0].keys()) if results else []))
+        writer.writeheader()
+        writer.writerows(results)
+
+    json_path = os.path.join(output_folder, 'results.json')
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(results, f, indent=4)
+
+    print(f"\nResults exported to:\n- {csv_path}\n- {json_path}")
