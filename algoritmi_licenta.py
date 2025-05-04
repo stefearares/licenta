@@ -144,8 +144,8 @@ def plotting(array_to_plot, title):
 
 
 def pixel_count(array_to_count):
-    # Count the number of desert zones white(1) the rest should be 0( because 1*255 =255 and 0*255=0)
-    black_pixels = np.sum(array_to_count == 0)
+    # Count the number of desert zones white(255) the rest should be 0( because 1*255 =255 and 0*255=0)
+    black_pixels = np.sum(array_to_count == 255)
 
     return int(black_pixels)
 

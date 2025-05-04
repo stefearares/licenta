@@ -5,6 +5,7 @@ from main_window import MainWindow
 from main_widget import Widget
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
 from prediction_model import *
+from prediction_modelv2 import *
 
 def processing_new_folder_with_safe_files():
 
@@ -125,7 +126,31 @@ def process_csv_file_with_arima():
 
     sys.exit(0)
 
-def plot_bar_evolution(file_path: str):
+def process_csv_file_with_sarima():
+    app = QApplication(sys.argv)
+    file_path, _ = QFileDialog.getOpenFileName(
+        None,
+        "Select CSV File for ARIMA",
+        "",
+        "CSV Files (*.csv);;All Files (*)"
+    )
+    if not file_path:
+        QMessageBox.information(None, "No File", "No CSV selected. Exiting.")
+        sys.exit(0)
+
+    results = sarima_for_all_columns(file_path)
+    if not results:
+        QMessageBox.warning(None, "No Models", "No series could be modeled.")
+        sys.exit(1)
+
+    for col, data in results.items():
+        print(f"\n=== Series: {col} (SARIMA order={data['order']}) ===")
+        print("Original data (year, value):", data['original'])
+        print("Forecast (year, predicted):", data['forecast'])
+        print("Confidence intervals (year, lower, upper):", data['conf_int'])
+
+    sys.exit(0)
+def plot_bar_evolution_arima(file_path: str):
 
     results_dict = arima_for_all_columns(file_path)
     filtered = {k: v for k, v in results_dict.items() if 'user_defined' not in k}
@@ -167,6 +192,57 @@ def plot_bar_evolution(file_path: str):
 
     plt.show()
 
+def plot_bar_evolution_sarima(file_path: str):
+    results_dict = sarima_for_all_columns(file_path)
+    filtered = {k: v for k, v in results_dict.items() if 'user_defined' not in k}
+    if not filtered:
+        print("No series to plot.")
+        return
+
+    n = len(filtered)
+    cols = (n + 1) // 2
+    rows = 2
+    width = min(cols * 3, 12)
+    height = min(rows * 3, 6)
+
+    fig, axes = plt.subplots(rows, cols, figsize=(width, height), constrained_layout=True)
+    axes = axes.flatten()
+
+    for ax, (col, data) in zip(axes, filtered.items()):
+        orig = data['original']
+        by_year = {}
+        for y, v in orig:
+            by_year.setdefault(y, []).append(v)
+        hist_years = sorted(by_year)
+        hist_vals  = [np.mean(by_year[y]) for y in hist_years]
+
+        fc_years, fc_vals = zip(*data['forecast'])
+
+        all_vals = hist_vals + list(fc_vals)
+        max_val  = max(all_vals) or 1
+        hist_pct = [v/max_val*100 for v in hist_vals]
+        fc_pct   = [v/max_val*100 for v in fc_vals]
+
+        x_hist = np.arange(len(hist_years))
+        x_fc   = x_hist[-1] + 1 + np.arange(len(fc_years))
+
+        # draw bars
+        ax.bar(x_hist, hist_pct)
+        ax.bar(x_fc,   fc_pct, color='green')
+
+        ax.set_title(col)
+        ax.set_ylabel('Percent of Max (%)')
+        ax.set_xticks(np.concatenate([x_hist, x_fc]))
+        ax.set_xticklabels(
+            [str(y) for y in hist_years] + [str(y) for y in fc_years],
+            rotation=90, fontsize=8
+        )
+
+    for ax in axes[n:]:
+        ax.axis('off')
+
+    plt.show()
+
 def plot_bar_evolution_flow():
 
     app = QApplication(sys.argv)
@@ -180,11 +256,96 @@ def plot_bar_evolution_flow():
         QMessageBox.information(None, "No File", "No CSV selected.")
         sys.exit(0)
 
-    plot_bar_evolution(csv_path)
+    plot_bar_evolution_sarima(csv_path)
     sys.exit(0)
 
 
+def compare_arima_sarima(file_path: str,
+                         year_col: str=None,
+                         sarima_orders=[(0,1,1),(1,1,1),(1,0,1),(2,1,0)],
+                         holdout_years: int=2):
+    df = pd.read_csv(file_path)
+    if year_col is None:
+        year_col = df.columns[0]
+    df[year_col] = df[year_col].astype(int)
+
+    # 1) collapse to one value per year (mean)
+    yearly = df.groupby(year_col).mean()
+    years = yearly.index.values
+    data = yearly.values  # shape (n_years, n_series)
+    cols = yearly.columns
+
+    # define train/test split
+    train_idx = slice(0, len(years)-holdout_years)
+    test_idx  = slice(len(years)-holdout_years, None)
+    train_years, test_years = years[train_idx], years[test_idx]
+
+    for i, col in enumerate(cols):
+        ts = yearly[col].values
+        train_ts = ts[train_idx]
+        test_ts  = ts[test_idx]
+
+        print(f"\n=== Series '{col}' ===")
+        # --- ARIMA(1,1,1) ---
+        try:
+            m1 = ARIMA(train_ts, order=(1,1,1),
+                       enforce_stationarity=False,
+                       enforce_invertibility=False).fit()
+            aic1 = m1.aic
+            fc1  = m1.forecast(steps=holdout_years)
+            mae1 = np.mean(np.abs(fc1 - test_ts))
+        except Exception as e:
+            print(" ARIMA ERROR:", e)
+            aic1 = np.nan; mae1 = np.nan
+
+        # --- SARIMAX trend + best order by AIC ---
+        best_aic, best_order = np.inf, None
+        for order in sarima_orders:
+            try:
+                m = SARIMAX(train_ts,
+                            order=order,
+                            trend='t',
+                            enforce_stationarity=False,
+                            enforce_invertibility=False).fit(disp=False)
+                if m.aic < best_aic:
+                    best_aic, best_order = m.aic, order
+            except:
+                continue
+
+        try:
+            m2 = SARIMAX(train_ts,
+                         order=best_order,
+                         trend='t',
+                         enforce_stationarity=False,
+                         enforce_invertibility=False).fit(disp=False)
+            aic2 = m2.aic
+            fc2  = m2.forecast(steps=holdout_years)
+            mae2 = np.mean(np.abs(fc2 - test_ts))
+        except Exception as e:
+            print(" SARIMA ERROR:", e)
+            aic2 = np.nan; mae2 = np.nan
+
+        print(f" ARIMA(1,1,1):     AIC = {aic1:.1f},  MAE = {mae1:.1f}")
+        print(f" SARIMA{best_order}+t: AIC = {aic2:.1f},  MAE = {mae2:.1f}")
+
+def process_csv_file_compare():
+    app = QApplication(sys.argv)
+    csv_path, _ = QFileDialog.getOpenFileName(
+        None,
+        "Select CSV file for ARIMA vs SARIMA comparison",
+        "",
+        "CSV Files (*.csv);;All Files (*)"
+    )
+    if not csv_path:
+        QMessageBox.information(None, "No file", "No CSV selected. Exiting.")
+        sys.exit(0)
+
+    # run the comparison and print to console
+    compare_arima_sarima(csv_path)
+
+    sys.exit(0)
 if __name__ == '__main__':
-    plot_bar_evolution_flow()
-
-
+    # plot_bar_evolution_flow()
+    # processing_normal_image()
+    # processing_new_folder_with_safe_files()
+    process_csv_file_compare()
