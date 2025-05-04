@@ -1,31 +1,59 @@
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
+import warnings
+from statsmodels.tools.sm_exceptions import ConvergenceWarning
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
 
-years = [2000, 2001, 2002, 2005, 2006, 2007, 2008, 2009]
-pixels = [1200, 1325, 1500, 1600, 1580, 1610, 1625, 1610]
+def arima_for_all_columns(
+    file_path: str,
+    date_col: int = 0,
+    order: tuple = (1, 1, 1),
+    forecast_steps: int = 5
+):
+    df = pd.read_csv(file_path)
 
-# Create a Series
-ts = pd.Series(data=pixels, index=pd.DatetimeIndex([f"{y}-01-01" for y in years]))
+    year_col = df.columns[date_col]
+    data_cols = df.columns.drop(year_col)
+    df_grouped = df.groupby(year_col)[data_cols].mean().sort_index()
 
-# Fit ARIMA(1,1,1) as example
-model = ARIMA(ts, order=(1,1,1))
-res = model.fit()
+    results = {}
+    for col in data_cols:
+        ts = df_grouped[col].astype(float)
+        if ts.size < 3:
+            continue
+        values = ts.tolist()
+        years = ts.index.tolist()
 
-# Forecast next 5 years
-forecast = res.get_forecast(steps=5)
-print(forecast.predicted_mean)
+        try:
+            model = ARIMA(
+                values,
+                order=order,
+                enforce_stationarity=False,
+                enforce_invertibility=False
+            )
+            res = model.fit()
+            forecast = res.get_forecast(steps=forecast_steps)
+        except Exception as e:
+            print(f"Skipping '{col}' due to model error: {e}")
+            continue
 
-#how wide the uncertainty is in your prediction, if intervals too wide model not very confident
-print(forecast.conf_int())
+        original = list(zip(years, values))
 
-'''
-Look for:
+        fc_vals = forecast.predicted_mean.tolist()
+        last_year = years[-1]
+        forecast_list = [(last_year + i, fc_vals[i-1]) for i in range(1, forecast_steps + 1)]
 
-AIC/BIC: Lower is better.
+        ci = forecast.conf_int()
+        lowers = ci[:, 0].tolist()
+        uppers = ci[:, 1].tolist()
+        conf_int = [(last_year + i, lowers[i-1], uppers[i-1]) for i in range(1, forecast_steps + 1)]
 
-p-values for AR/MA terms: < 0.05 = statistically significant.
+        results[col] = {
+            'order': order,
+            'original': original,
+            'forecast': forecast_list,
+            'conf_int': conf_int
+        }
 
-Standard errors: Large = possibly unstable estimates.
-'''
-print(res.summary())
+    return results

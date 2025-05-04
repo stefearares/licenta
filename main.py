@@ -3,12 +3,12 @@ from PySide6.QtWidgets import QApplication
 from algoritmi_licenta import *
 from main_window import MainWindow
 from main_widget import Widget
-from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog
+from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
+from prediction_model import *
 
+def processing_new_folder_with_safe_files():
 
-if __name__ == '__main__':
     app = QApplication(sys.argv)
-
     src = QFileDialog.getExistingDirectory(
         None,
         "Select folder with .SAFE products",
@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
     print("\n>>> RESULTS LIST:", results)
 
-    # 5) Select export folder
+
     dest = QFileDialog.getExistingDirectory(
         None,
         "Select export folder",
@@ -46,13 +46,15 @@ if __name__ == '__main__':
         export_results(results, dest)
     else:
         print("Export canceled.")
-    '''
+
+def gui_app():
     app = QApplication(sys.argv)
-    widget=Widget()
+    widget = Widget()
     window = MainWindow(widget)
     window.show()
     sys.exit(app.exec())
-    
+
+def processing_normal_image():
     blue_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B02-Olt.jpg"  # Blue band
     red_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B04-Olt.jpg"  # Red band (or VRE if available)
     swir1_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B11-Olt.jpg"  # SWIR1 band
@@ -79,10 +81,10 @@ if __name__ == '__main__':
     desert_mask2 = kmeans_clustering_pp_centers(normalized_ndesi, n_clusters=2)
     desert_mask3 = kmeans_clustering_pp_centers(normalized_nsi, n_clusters=2)
     desert_mask4 = kmeans_clustering_random_centers(normalized_nsi, n_clusters=2)
-    otsu_ndesi=create_binary_image_otsu_threshold(normalized_ndesi)
-    otsu_nsi=create_binary_image_otsu_threshold(normalized_nsi)
-    user_ndesi=create_binary_image_user_defined_threshold(normalized_ndesi,79)
-    user_nsi=create_binary_image_user_defined_threshold(normalized_nsi,85)
+    otsu_ndesi = create_binary_image_otsu_threshold(normalized_ndesi)
+    otsu_nsi = create_binary_image_otsu_threshold(normalized_nsi)
+    user_ndesi = create_binary_image_user_defined_threshold(normalized_ndesi, 79)
+    user_nsi = create_binary_image_user_defined_threshold(normalized_nsi, 85)
     plotting(user_ndesi, "User defined threshold NDESI")
     plotting(user_nsi, "User defined threshold NSI")
     plotting(otsu_ndesi, "Otsu NDESI")
@@ -97,4 +99,92 @@ if __name__ == '__main__':
     print("NSI index", pixel_count(binary_nsi))
     print("K random threshold", pixel_count(desert_mask))
     print("K pp threshold", pixel_count(desert_mask2))
-'''
+
+def process_csv_file_with_arima():
+    app = QApplication(sys.argv)
+    file_path, _ = QFileDialog.getOpenFileName(
+        None,
+        "Select CSV File for ARIMA",
+        "",
+        "CSV Files (*.csv);;All Files (*)"
+    )
+    if not file_path:
+        QMessageBox.information(None, "No File", "No CSV selected. Exiting.")
+        sys.exit(0)
+
+    results = arima_for_all_columns(file_path)
+    if not results:
+        QMessageBox.warning(None, "No Models", "No series could be modeled.")
+        sys.exit(1)
+
+    for col, data in results.items():
+        print(f"\n=== Series: {col} (ARIMA order={data['order']}) ===")
+        print("Original data (year, value):", data['original'])
+        print("Forecast (year, predicted):", data['forecast'])
+        print("Confidence intervals (year, lower, upper):", data['conf_int'])
+
+    sys.exit(0)
+
+def plot_bar_evolution(file_path: str):
+
+    results_dict = arima_for_all_columns(file_path)
+    filtered = {k: v for k, v in results_dict.items() if 'user_defined' not in k}
+    if not filtered:
+        print("No series to plot.")
+        return
+
+    n = len(filtered)
+    cols = (n + 1) // 2
+    rows = 2
+    width = min(cols * 3, 12)
+    height = min(rows * 3, 6)
+    fig, axes = plt.subplots(nrows=rows, ncols=cols, figsize=(width, height), constrained_layout=True)
+    axes = axes.flatten()
+
+    for ax, (col, data) in zip(axes, filtered.items()):
+        orig_years, orig_vals = zip(*data['original'])
+        fc_years, fc_vals = zip(*data['forecast'])
+        years = list(orig_years) + list(fc_years)
+        vals = list(orig_vals) + list(fc_vals)
+        x = np.arange(len(years))
+
+        max_val = max(vals) if vals else 1
+        pct_vals = [v / max_val * 100 for v in vals]
+
+        hist_len = len(orig_years)
+
+        ax.bar(x[:hist_len], pct_vals[:hist_len])
+        ax.bar(x[hist_len:], pct_vals[hist_len:], color='green')
+
+        ax.set_title(col)
+        ax.set_ylabel('Percent of Max (%)')
+
+        ax.set_xticks(x)
+        ax.set_xticklabels([str(y) for y in years], rotation=90, fontsize=8)
+
+    for ax in axes[n:]:
+        ax.axis('off')
+
+    plt.show()
+
+def plot_bar_evolution_flow():
+
+    app = QApplication(sys.argv)
+    csv_path, _ = QFileDialog.getOpenFileName(
+        None,
+        "Select CSV result file",
+        "",
+        "CSV Files (*.csv);;All Files (*)"
+    )
+    if not csv_path:
+        QMessageBox.information(None, "No File", "No CSV selected.")
+        sys.exit(0)
+
+    plot_bar_evolution(csv_path)
+    sys.exit(0)
+
+
+if __name__ == '__main__':
+    plot_bar_evolution_flow()
+
+
