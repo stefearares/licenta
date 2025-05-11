@@ -6,7 +6,7 @@ from main_widget import Widget
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
 from prediction_model import *
 from prediction_modelv2 import *
-
+from prediction_model_auto_arima import *
 def processing_new_folder_with_safe_files():
 
     app = QApplication(sys.argv)
@@ -19,7 +19,6 @@ def processing_new_folder_with_safe_files():
         print("No source folder selected.")
         sys.exit(0)
 
-    # 2) Ask for the user-defined threshold
     threshold, ok = QInputDialog.getDouble(
         None,
         "User-defined Threshold",
@@ -260,92 +259,11 @@ def plot_bar_evolution_flow():
     sys.exit(0)
 
 
-def compare_arima_sarima(file_path: str,
-                         year_col: str=None,
-                         sarima_orders=[(0,1,1),(1,1,1),(1,0,1),(2,1,0)],
-                         holdout_years: int=2):
-    df = pd.read_csv(file_path)
-    if year_col is None:
-        year_col = df.columns[0]
-    df[year_col] = df[year_col].astype(int)
-
-    # 1) collapse to one value per year (mean)
-    yearly = df.groupby(year_col).mean()
-    years = yearly.index.values
-    data = yearly.values  # shape (n_years, n_series)
-    cols = yearly.columns
-
-    # define train/test split
-    train_idx = slice(0, len(years)-holdout_years)
-    test_idx  = slice(len(years)-holdout_years, None)
-    train_years, test_years = years[train_idx], years[test_idx]
-
-    for i, col in enumerate(cols):
-        ts = yearly[col].values
-        train_ts = ts[train_idx]
-        test_ts  = ts[test_idx]
-
-        print(f"\n=== Series '{col}' ===")
-        # --- ARIMA(1,1,1) ---
-        try:
-            m1 = ARIMA(train_ts, order=(1,1,1),
-                       enforce_stationarity=False,
-                       enforce_invertibility=False).fit()
-            aic1 = m1.aic
-            fc1  = m1.forecast(steps=holdout_years)
-            mae1 = np.mean(np.abs(fc1 - test_ts))
-        except Exception as e:
-            print(" ARIMA ERROR:", e)
-            aic1 = np.nan; mae1 = np.nan
-
-        # --- SARIMAX trend + best order by AIC ---
-        best_aic, best_order = np.inf, None
-        for order in sarima_orders:
-            try:
-                m = SARIMAX(train_ts,
-                            order=order,
-                            trend='t',
-                            enforce_stationarity=False,
-                            enforce_invertibility=False).fit(disp=False)
-                if m.aic < best_aic:
-                    best_aic, best_order = m.aic, order
-            except:
-                continue
-
-        try:
-            m2 = SARIMAX(train_ts,
-                         order=best_order,
-                         trend='t',
-                         enforce_stationarity=False,
-                         enforce_invertibility=False).fit(disp=False)
-            aic2 = m2.aic
-            fc2  = m2.forecast(steps=holdout_years)
-            mae2 = np.mean(np.abs(fc2 - test_ts))
-        except Exception as e:
-            print(" SARIMA ERROR:", e)
-            aic2 = np.nan; mae2 = np.nan
-
-        print(f" ARIMA(1,1,1):     AIC = {aic1:.1f},  MAE = {mae1:.1f}")
-        print(f" SARIMA{best_order}+t: AIC = {aic2:.1f},  MAE = {mae2:.1f}")
-
-def process_csv_file_compare():
-    app = QApplication(sys.argv)
-    csv_path, _ = QFileDialog.getOpenFileName(
-        None,
-        "Select CSV file for ARIMA vs SARIMA comparison",
-        "",
-        "CSV Files (*.csv);;All Files (*)"
-    )
-    if not csv_path:
-        QMessageBox.information(None, "No file", "No CSV selected. Exiting.")
-        sys.exit(0)
-
-    # run the comparison and print to console
-    compare_arima_sarima(csv_path)
-
-    sys.exit(0)
+#De facut backtesting la arima cu datele actuale pe care le am
 if __name__ == '__main__':
     # plot_bar_evolution_flow()
     # processing_normal_image()
     # processing_new_folder_with_safe_files()
-    process_csv_file_compare()
+    # process_csv_file_compare()
+    # gui_app()
+    plot_bar_evolution_auto()
