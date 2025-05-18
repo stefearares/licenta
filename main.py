@@ -83,7 +83,7 @@ def processing_normal_image():
     desert_mask4 = kmeans_clustering_random_centers(normalized_nsi, n_clusters=2)
     otsu_ndesi = create_binary_image_otsu_threshold(normalized_ndesi)
     otsu_nsi = create_binary_image_otsu_threshold(normalized_nsi)
-    user_ndesi = create_binary_image_user_defined_threshold(normalized_ndesi, 79)
+    user_ndesi = create_binary_image_user_defined_threshold(normalized_ndesi, 207)
     user_nsi = create_binary_image_user_defined_threshold(normalized_nsi, 85)
     plotting(user_ndesi, "User defined threshold NDESI")
     plotting(user_nsi, "User defined threshold NSI")
@@ -262,8 +262,8 @@ def plot_bar_evolution_flow():
 #De facut backtesting la arima cu datele actuale pe care le am
 if __name__ == '__main__':
     # plot_bar_evolution_flow()
-    # processing_normal_image()
+     processing_normal_image()
     # processing_new_folder_with_safe_files()
     # process_csv_file_compare()
     # gui_app()
-    plot_bar_evolution_auto()
+    # plot_bar_evolution_auto()

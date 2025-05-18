@@ -17,6 +17,7 @@ def arima_for_all_columns(
     data_cols = df.columns.drop(year_col)
     df_grouped = df.groupby(year_col)[data_cols].mean().sort_index()
 
+
     results = {}
     for col in data_cols:
         ts = df_grouped[col].astype(float)

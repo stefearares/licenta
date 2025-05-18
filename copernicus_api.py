@@ -23,7 +23,6 @@ def get_access_token(username: str, password: str) -> str:
 
 
 
-# Example usage: Secure password input
 username = getpass.getpass("Enter your username: ")
 password = getpass.getpass("Enter your password: ")
 access_token = get_access_token(username, password)
