@@ -262,8 +262,8 @@ def plot_bar_evolution_flow():
 #De facut backtesting la arima cu datele actuale pe care le am
 if __name__ == '__main__':
     # plot_bar_evolution_flow()
-     processing_normal_image()
+    # processing_normal_image()
     # processing_new_folder_with_safe_files()
     # process_csv_file_compare()
     # gui_app()
-    # plot_bar_evolution_auto()
+    plot_bar_evolution_auto()
