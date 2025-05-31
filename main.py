@@ -255,14 +255,14 @@ def plot_bar_evolution_flow():
         QMessageBox.information(None, "No File", "No CSV selected.")
         sys.exit(0)
 
-    plot_bar_evolution_sarima(csv_path)
+    plot_bar_evolution_arima(csv_path)
     sys.exit(0)
 
 
 #De facut backtesting la arima cu datele actuale pe care le am
 if __name__ == '__main__':
-    # plot_bar_evolution_flow()
-     processing_normal_image()
+     plot_bar_evolution_flow()
+    # processing_normal_image()
     # processing_new_folder_with_safe_files()
     # process_csv_file_compare()
     # gui_app()

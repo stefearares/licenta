@@ -23,11 +23,9 @@ def sarima_for_all_columns(
     results = {}
     for col in data.columns:
         ts = data[col].dropna().values
-        if len(ts) < 8 or ts.sum()==0:
-            # not enough points or entirely zero
+        if len(ts) < 8 or ts.sum() == 0:
             continue
 
-        # pick best (p,d,q) by AIC
         best_aic = np.inf
         best_order = None
         for order in order_grid:
@@ -50,12 +48,8 @@ def sarima_for_all_columns(
                         enforce_invertibility=False)
         res = model.fit(disp=False)
 
-        # 1) Original: list of (year,value) for each observation
         original = list(zip(years.tolist(), ts.tolist()))
-
-        # 2) Forecast step-level out for each calendar day (or step)
-        steps = len(years)  # one step for each past point per year
-        # we actually want forecast_years * average_points_per_year steps
+        steps = len(years)
         avg_ppy = max(1, int(len(ts) / len(np.unique(years))))
         fut_steps = forecast_years * avg_ppy
 
@@ -63,22 +57,21 @@ def sarima_for_all_columns(
         fc_mean = fc.predicted_mean
 
         fc_blocks = [
-            fc_mean[i*avg_ppy:(i+1)*avg_ppy].mean()
+            fc_mean[i * avg_ppy:(i + 1) * avg_ppy].mean()
             for i in range(forecast_years)
         ]
         last_year = years.max()
         forecast = [(last_year + i + 1, fc_blocks[i]) for i in range(forecast_years)]
 
-        # Conf Int similarly
-        ci = fc.conf_int()  # now a NumPy array of shape (steps, 2)
-        lo = ci[:, 0]  # lower bounds
+        ci = fc.conf_int()
+        lo = ci[:, 0]
         hi = ci[:, 1]
         lo_blocks = [
-            lo[i*avg_ppy:(i+1)*avg_ppy].mean()
+            lo[i * avg_ppy:(i + 1) * avg_ppy].mean()
             for i in range(forecast_years)
         ]
         hi_blocks = [
-            hi[i*avg_ppy:(i+1)*avg_ppy].mean()
+            hi[i * avg_ppy:(i + 1) * avg_ppy].mean()
             for i in range(forecast_years)
         ]
         conf_int = [
@@ -92,5 +85,14 @@ def sarima_for_all_columns(
             'forecast': forecast,
             'conf_int': conf_int
         }
+
+    for col, data in results.items():
+        forecast_vals = data['forecast']
+        print(f"\n--- {col} ---")
+        for i in range(1, len(forecast_vals)):
+            year_prev, val_prev = forecast_vals[i - 1]
+            year_curr, val_curr = forecast_vals[i]
+            growth = ((val_curr - val_prev) / val_prev) * 100 if val_prev else 0
+            print(f"{year_prev} → {year_curr}: {growth:.2f}% (de la {val_prev:.2f} la {val_curr:.2f})")
 
     return results

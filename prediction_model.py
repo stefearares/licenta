@@ -4,7 +4,6 @@ import warnings
 from statsmodels.tools.sm_exceptions import ConvergenceWarning
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
-
 def arima_for_all_columns(
     file_path: str,
     date_col: int = 0,
@@ -16,7 +15,6 @@ def arima_for_all_columns(
     year_col = df.columns[date_col]
     data_cols = df.columns.drop(year_col)
     df_grouped = df.groupby(year_col)[data_cols].mean().sort_index()
-
 
     results = {}
     for col in data_cols:
@@ -40,15 +38,14 @@ def arima_for_all_columns(
             continue
 
         original = list(zip(years, values))
-
         fc_vals = forecast.predicted_mean.tolist()
         last_year = years[-1]
-        forecast_list = [(last_year + i, fc_vals[i-1]) for i in range(1, forecast_steps + 1)]
+        forecast_list = [(last_year + i, fc_vals[i - 1]) for i in range(1, forecast_steps + 1)]
 
         ci = forecast.conf_int()
         lowers = ci[:, 0].tolist()
         uppers = ci[:, 1].tolist()
-        conf_int = [(last_year + i, lowers[i-1], uppers[i-1]) for i in range(1, forecast_steps + 1)]
+        conf_int = [(last_year + i, lowers[i - 1], uppers[i - 1]) for i in range(1, forecast_steps + 1)]
 
         results[col] = {
             'order': order,
@@ -56,5 +53,14 @@ def arima_for_all_columns(
             'forecast': forecast_list,
             'conf_int': conf_int
         }
+
+    for col, data in results.items():
+        forecast_vals = data['forecast']
+        print(f"\n--- {col} ---")
+        for i in range(1, len(forecast_vals)):
+            year_prev, val_prev = forecast_vals[i - 1]
+            year_curr, val_curr = forecast_vals[i]
+            growth = ((val_curr - val_prev) / val_prev) * 100 if val_prev else 0
+            print(f"{year_prev} → {year_curr}: {growth:.2f}% (de la {val_prev:.2f} la {val_curr:.2f})")
 
     return results
