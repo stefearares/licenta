@@ -1,7 +1,6 @@
 import sys
 import argparse
 import warnings
-
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_squared_error
@@ -10,18 +9,19 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from pmdarima import auto_arima
 from statsmodels.tsa.stattools import adfuller, kpss
 
+"""Suprimarea avertizarilor produse de librarii."""
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 def aggregate_by_year(df, year_col):
-    """Group a dataframe by ``year_col`` and compute the mean for each year."""
+    """Grupeaza un dataframe in functie de ``year_col`` si calculeaza mean pentru fiecare an."""
     return df.groupby(year_col).mean().sort_index()
 
 
 def backtest(vals, window, model_func):
-    """Rolling window backtest using ``model_func`` to forecast one step."""
+    """Rolling window backtest folosind ``model_func`` pentru a prezice un pas."""
     actuals, preds = [], []
     for i in range(len(vals) - window):
         train = vals[i : i + window]
@@ -33,7 +33,7 @@ def backtest(vals, window, model_func):
 
 
 def fit_arima(train):
-    """Fit a simple ARIMA(1,1,1) model and forecast one step."""
+    """Foloseste un model ARIMA(1,1,1) si prezice un pas."""
     m = ARIMA(train, order=(1,1,1),
               enforce_stationarity=False,
               enforce_invertibility=False).fit()
@@ -41,7 +41,7 @@ def fit_arima(train):
 
 
 def fit_sarima(train):
-    """Fit a SARIMA(2,1,0)+trend model and forecast one step."""
+    """Foloseste un model SARIMA(2,1,0)+trend  si prezice un pas."""
     m = SARIMAX(train, order=(2,1,0), trend='t',
                 enforce_stationarity=False,
                 enforce_invertibility=False).fit(disp=False)
@@ -49,20 +49,20 @@ def fit_sarima(train):
 
 
 def fit_auto(train):
-    """Fit an Auto-ARIMA model and forecast one step."""
+    """Foloseste un mode Auto-ARIMA si prezice un pas."""
     m = auto_arima(train, seasonal=False, suppress_warnings=True)
     return m.predict(n_periods=1)[0]
 
 
 def compute_metrics(actuals, preds):
-    """Return MAPE and RMSE between arrays of actual and predicted values."""
+    """Return MAPE si RMSE intre arrays cu date reale si cele prezise."""
     mape = np.nanmean(np.abs((actuals - preds) / actuals)) * 100
     rmse = np.sqrt(mean_squared_error(actuals, preds))
     return round(mape,2), round(rmse,2)
 
 
 def holdout_evaluate(years, vals, train_until, test_until):
-    """Evaluate ARIMA variants on a hold-out period."""
+    """Evalueaza variante ARIMA cu o perioada hold-out."""
 
     idx = {y: i for i, y in enumerate(years)}
     train_years = [y for y in years if y <= train_until]
@@ -106,12 +106,11 @@ def holdout_evaluate(years, vals, train_until, test_until):
 
 
 def test_stationarity(series, name=None):
-    """Run ADF and KPSS tests on ``series`` and return the results."""
+    """Foloseste teste ADF si KPSS pe ``series`` si returneaza rezultatele."""
 
-    # Convert to numpy array if it's not already
     series = np.array(series)
     
-    # Skip if too few points
+    # Sare peste daca sunt prea putine puncte
     if len(series) < 8:
         print(f"Series '{name}' has too few points for stationarity testing")
         return {
@@ -124,37 +123,37 @@ def test_stationarity(series, name=None):
     
     result = {'series': name}
     
-    # ADF Test (null hypothesis: series is non-stationary)
+    # ADF Test
     try:
         adf_result = adfuller(series, autolag='AIC')
         result['adf_statistic'] = round(adf_result[0], 4)
         result['adf_pvalue'] = round(adf_result[1], 4)
-        # If p-value < 0.05, we reject the null hypothesis (series is stationary)
+        # Daca p-value < 0.05, respingem ipoteza nula (serie stationara)
         result['adf_stationary'] = result['adf_pvalue'] < 0.05
         
-        # Critical values for reference
+
         result['adf_critical_values'] = {f'{key}%': round(val, 4) for key, val in adf_result[4].items()}
     except Exception as e:
         print(f"ADF Test failed for '{name}': {str(e)}")
         result['adf_stationary'] = None
         result['adf_pvalue'] = None
     
-    # KPSS Test (null hypothesis: series is stationary)
+    # KPSS Test
     try:
         kpss_result = kpss(series, regression='c', nlags='auto')
         result['kpss_statistic'] = round(kpss_result[0], 4)
         result['kpss_pvalue'] = round(kpss_result[1], 4)
-        # If p-value > 0.05, we fail to reject the null hypothesis (series is stationary)
+        # Daca p-value > 0.05, nu putem respinge ipoteza nula (serie stationara)
         result['kpss_stationary'] = result['kpss_pvalue'] > 0.05
         
-        # Critical values for reference
+
         result['kpss_critical_values'] = {f'{key}%': round(val, 4) for key, val in kpss_result[3].items()}
     except Exception as e:
         print(f"KPSS Test failed for '{name}': {str(e)}")
         result['kpss_stationary'] = None
         result['kpss_pvalue'] = None
     
-    # Overall assessment
+
     if result.get('adf_stationary') and result.get('kpss_stationary'):
         result['conclusion'] = "Series is stationary (both tests agree)"
     elif not result.get('adf_stationary') and not result.get('kpss_stationary'):
@@ -170,8 +169,7 @@ def test_stationarity(series, name=None):
 
 
 def analyze_stationarity(file_path, date_col=0):
-    """Analyze stationarity of all numeric series in the CSV file."""
-    import pandas as pd
+    """Primeste un path pentru un fisier CSV unde analizeaza stationaritatea."""
     
     try:
         df = pd.read_csv(file_path)
@@ -196,7 +194,7 @@ def analyze_stationarity(file_path, date_col=0):
         values = ts.tolist()
         result = test_stationarity(values, col)
         
-        # Check if differencing improves stationarity
+        #  Diferentierea imbunatateste stationaritatea?
         if not result.get('adf_stationary') or not result.get('kpss_stationary'):
             diff_values = np.diff(values)
             diff_result = test_stationarity(diff_values, f"{col} (1st diff)")
@@ -208,11 +206,9 @@ def analyze_stationarity(file_path, date_col=0):
     if results:
         results_df = pd.DataFrame(results)
 
-        # Select and reorder columns for better presentation
         display_columns = ['series', 'adf_stationary', 'kpss_stationary', 
                           'adf_pvalue', 'kpss_pvalue', 'conclusion']
 
-        # Add differencing column if it exists
         if 'diff_conclusion' in results_df.columns:
             display_columns.append('diff_conclusion')
             
@@ -224,8 +220,7 @@ def analyze_stationarity(file_path, date_col=0):
 
 
 def main():
-    """Entry point for running backtests or stationarity analysis from the
-    command line."""
+    """Comenzile pentru rularea testelor"""
     p = argparse.ArgumentParser(
         description="Backtest rolling-window or hold-out evaluation for ARIMA, SARIMA, Auto-ARIMA"
     )

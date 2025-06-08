@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication, QFileDialog
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 def plot_bar_evolution_auto(blocks_ahead: int = 5):
-    """Use AutoARIMA to forecast and plot the evolution of all series."""
+    """Foloseste AutoArima si ploteaza toate seriile."""
     app = QApplication([])
     csv_path, _ = QFileDialog.getOpenFileName(
         None, "Select CSV result file", "", "CSV Files (*.csv);;All Files (*)"
