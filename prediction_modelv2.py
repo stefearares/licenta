@@ -13,6 +13,7 @@ def sarima_for_all_columns(
     order_grid = [(0,1,1), (1,1,1), (1,0,1), (2,1,0)],
     forecast_years: int = 5
 ):
+    """Fit SARIMA models for each column and forecast future values."""
     df = pd.read_csv(file_path)
     if year_col is None:
         year_col = df.columns[0]

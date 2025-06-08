@@ -10,6 +10,7 @@ def arima_for_all_columns(
     order: tuple = (1, 1, 1),
     forecast_steps: int = 5
 ):
+    """Fit an ARIMA model for every column in the CSV and forecast."""
     df = pd.read_csv(file_path)
 
     year_col = df.columns[date_col]
