@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButt
 
 class DialogBox(QDialog):
     def __init__(self):
+        """Dialog for entering a year, threshold and selecting a directory."""
         super().__init__()
         self.setWindowTitle("Add a New Year")
 

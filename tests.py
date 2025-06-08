@@ -16,10 +16,12 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 def aggregate_by_year(df, year_col):
+    """Group a dataframe by ``year_col`` and compute the mean for each year."""
     return df.groupby(year_col).mean().sort_index()
 
 
 def backtest(vals, window, model_func):
+    """Rolling window backtest using ``model_func`` to forecast one step."""
     actuals, preds = [], []
     for i in range(len(vals) - window):
         train = vals[i : i + window]
@@ -31,6 +33,7 @@ def backtest(vals, window, model_func):
 
 
 def fit_arima(train):
+    """Fit a simple ARIMA(1,1,1) model and forecast one step."""
     m = ARIMA(train, order=(1,1,1),
               enforce_stationarity=False,
               enforce_invertibility=False).fit()
@@ -38,6 +41,7 @@ def fit_arima(train):
 
 
 def fit_sarima(train):
+    """Fit a SARIMA(2,1,0)+trend model and forecast one step."""
     m = SARIMAX(train, order=(2,1,0), trend='t',
                 enforce_stationarity=False,
                 enforce_invertibility=False).fit(disp=False)
@@ -45,17 +49,20 @@ def fit_sarima(train):
 
 
 def fit_auto(train):
+    """Fit an Auto-ARIMA model and forecast one step."""
     m = auto_arima(train, seasonal=False, suppress_warnings=True)
     return m.predict(n_periods=1)[0]
 
 
 def compute_metrics(actuals, preds):
+    """Return MAPE and RMSE between arrays of actual and predicted values."""
     mape = np.nanmean(np.abs((actuals - preds) / actuals)) * 100
     rmse = np.sqrt(mean_squared_error(actuals, preds))
     return round(mape,2), round(rmse,2)
 
 
 def holdout_evaluate(years, vals, train_until, test_until):
+    """Evaluate ARIMA variants on a hold-out period."""
 
     idx = {y: i for i, y in enumerate(years)}
     train_years = [y for y in years if y <= train_until]
@@ -99,6 +106,7 @@ def holdout_evaluate(years, vals, train_until, test_until):
 
 
 def test_stationarity(series, name=None):
+    """Run ADF and KPSS tests on ``series`` and return the results."""
 
     # Convert to numpy array if it's not already
     series = np.array(series)
@@ -162,6 +170,7 @@ def test_stationarity(series, name=None):
 
 
 def analyze_stationarity(file_path, date_col=0):
+    """Analyze stationarity of all numeric series in the CSV file."""
     import pandas as pd
     
     try:
@@ -215,6 +224,8 @@ def analyze_stationarity(file_path, date_col=0):
 
 
 def main():
+    """Entry point for running backtests or stationarity analysis from the
+    command line."""
     p = argparse.ArgumentParser(
         description="Backtest rolling-window or hold-out evaluation for ARIMA, SARIMA, Auto-ARIMA"
     )

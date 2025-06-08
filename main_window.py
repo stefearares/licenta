@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QMainWindow
 
 class MainWindow(QMainWindow):
     def __init__(self,widget):
+        """Simple ``QMainWindow`` wrapper for the main widget."""
         super().__init__()
         self.setWindowTitle("Desert Analysis")
 

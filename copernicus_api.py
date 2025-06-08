@@ -4,6 +4,7 @@ import pandas as pd
 
 
 def get_access_token(username: str, password: str) -> str:
+    """Authenticate against the Copernicus API and return a bearer token."""
     data = {
         "client_id": "cdse-public",
         "username": username,

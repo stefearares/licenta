@@ -16,6 +16,26 @@ import matplotlib.pyplot as plt
 
 def initialize_bands(blue_band_path, green_band_path, red_band_path, swir1_band_path, swir2_band_path, nir_band_path,
                      swir_band_path):
+    """Load and convert the Sentinel-2 band images.
+
+    Parameters
+    ----------
+    blue_band_path, green_band_path, red_band_path : str
+        Paths to the B02, B03 and B04 bands.
+    swir1_band_path, swir2_band_path : str
+        Paths to the B11 and B12 bands.
+    nir_band_path : str
+        Path to the B08 band.
+    swir_band_path : str
+        Path to the SWIR band (B8A).
+
+    Returns
+    -------
+    tuple[np.ndarray, ...]
+        Arrays for each band converted to ``float32``. Values less than or equal
+        to zero are replaced with a small positive value to avoid divide by zero
+        in later computations.
+    """
     # Load images using OpenCV
     blue_band = cv2.imread(blue_band_path, cv2.IMREAD_GRAYSCALE)
     red_band = cv2.imread(red_band_path, cv2.IMREAD_GRAYSCALE)
@@ -45,6 +65,18 @@ def initialize_bands(blue_band_path, green_band_path, red_band_path, swir1_band_
 
 
 def compute_nsi(green_array, red_array, swir1_array):
+    """Compute the Normalized Sand Index (NSI).
+
+    Parameters
+    ----------
+    green_array, red_array, swir1_array : np.ndarray
+        Arrays for the green, red and SWIR1 bands.
+
+    Returns
+    -------
+    np.ndarray
+        The NSI values with logarithmic scaling applied.
+    """
     swir1_safe = np.where(swir1_array > 1, swir1_array, 1.01)
 
     #nsi_index = (green_array + red_array) / np.log1p(swir1_array)
@@ -56,6 +88,20 @@ def compute_nsi(green_array, red_array, swir1_array):
 
 
 def compute_ndesi(blue_array, red_array, swir1_array, swir2_array):
+    """Compute the Normalized Difference Eroded Soil Index (NDESI)."
+
+    Parameters
+    ----------
+    blue_array, red_array : np.ndarray
+        Arrays for the blue and red bands.
+    swir1_array, swir2_array : np.ndarray
+        Arrays for the SWIR1 and SWIR2 bands.
+
+    Returns
+    -------
+    np.ndarray
+        The NDESI values with logarithmic scaling applied.
+    """
     ndesi = ((blue_array - red_array) * (swir1_array - swir2_array)) / \
             ((blue_array + red_array) * (swir1_array + swir2_array))
     ndesi = np.nan_to_num(ndesi, nan=0.1, posinf=0.1, neginf=0.1)
@@ -65,26 +111,52 @@ def compute_ndesi(blue_array, red_array, swir1_array, swir2_array):
     return ndesi
 
 
-#Mask for water detection
+# Mask for water detection
 def compute_ndwi(green_array, nir_array):
+    """Compute the Normalized Difference Water Index (NDWI)."
+
+    Parameters
+    ----------
+    green_array, nir_array : np.ndarray
+        Arrays for the green and near infrared bands.
+
+    Returns
+    -------
+    np.ndarray
+        Binary mask where water pixels are 1.
+    """
     ndwi_index = (green_array - nir_array) / (green_array + nir_array)
     ndwi_array = np.where(ndwi_index > 0, 1, 0)
     return ndwi_array
 
 
-#INDEXUL de apa ce merge in zone cu vegetatie mai buna gen IRAN o sa pot sa incerc sa il testez
+# INDEXUL de apa ce merge in zone cu vegetatie mai buna gen IRAN o sa pot sa incerc sa il testez
 def compute_wi(swir_array, nir_array):
+    """Compute the Water Index used for vegetated regions.
+
+    Parameters
+    ----------
+    swir_array, nir_array : np.ndarray
+        SWIR and near infrared band arrays.
+
+    Returns
+    -------
+    np.ndarray
+        Binary mask representing probable water areas.
+    """
     wi_index = (nir_array + swir_array) / 2
     wi_array = np.where(wi_index > 0, 1, 0)
     return wi_array
 
 
 def ndesi_minus_ndwi(ndwi_array, binary_ndesi):
+    """Remove water pixels from an NDESI mask."""
     final_mask = np.where(ndwi_array == 0, 1, binary_ndesi)
     return final_mask
 
 
 def normalize_arrays(index_array):
+    """Normalize an array to ``0-255`` range for display or clustering."""
     normalized_index = ((index_array - np.min(index_array)) / (np.max(index_array) - np.min(index_array)) * 255).astype(
         np.uint8)
 
@@ -92,13 +164,14 @@ def normalize_arrays(index_array):
 
 
 def create_binary_image_user_defined_threshold(array_index, threshold):
-    # Apply a threshold to get a binary mask: values above the threshold are 1 (white), others are 0 (black)
+    """Threshold an array using a user supplied value."""
     binary_mask = np.where(array_index > threshold, 1, 0)
 
     return binary_mask.astype(np.uint8) * 255
 
 
 def create_binary_image_mean_threshold(array_index):
+    """Create a binary mask using the mean of the array as threshold."""
     mean_value = np.mean(array_index)
     binary_mask = np.where(array_index > mean_value, 1, 0)
 
@@ -106,6 +179,7 @@ def create_binary_image_mean_threshold(array_index):
 
 
 def create_binary_image_otsu_threshold(array_index):
+    """Create a binary mask using Otsu's thresholding."""
     normalized_index = cv2.normalize(array_index, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
     _, binary_mask = cv2.threshold(normalized_index, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -114,6 +188,7 @@ def create_binary_image_otsu_threshold(array_index):
 
 #Normalized pentru ca imaginea e mai granulata si are variatii in desert, in timp ce cea binara nu are
 def kmeans_clustering_pp_centers(normalized_index, n_clusters):
+    """Run k-means using k-means++ initialization."""
     pixels = normalized_index.reshape(-1, 1).astype(np.float32)
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
     _, labels, centers = cv2.kmeans(pixels, n_clusters, None, criteria, 10, cv2.KMEANS_PP_CENTERS)
@@ -126,6 +201,7 @@ def kmeans_clustering_pp_centers(normalized_index, n_clusters):
 
 
 def kmeans_clustering_random_centers(normalized_index, n_clusters):
+    """Run k-means with random initialization."""
     pixels = normalized_index.reshape(-1, 1).astype(np.float32)
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
     _, labels, centers = cv2.kmeans(pixels, n_clusters, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
@@ -138,13 +214,14 @@ def kmeans_clustering_random_centers(normalized_index, n_clusters):
 
 
 def plotting(array_to_plot, title):
+    """Display an array as a grayscale image using Matplotlib."""
     plt.imshow(array_to_plot, cmap='gray')
     plt.title(title)
     plt.show()
 
 
 def pixel_count(array_to_count):
-    # Count the number of desert zones white(255) the rest should be 0( because 1*255 =255 and 0*255=0)
+    """Count the number of white (255) pixels in a binary mask."""
     black_pixels = np.sum(array_to_count == 255)
 
     return int(black_pixels)
@@ -152,6 +229,7 @@ def pixel_count(array_to_count):
 results = []
 
 def unzip_safe(zip_path, output_root):
+    """Extract a ``.SAFE`` archive into ``output_root`` and return its path."""
     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
         with tempfile.TemporaryDirectory() as temp_dir:
             zip_ref.extractall(temp_dir)
@@ -172,6 +250,7 @@ def unzip_safe(zip_path, output_root):
 
 
 def find_metadata_file(root_folder):
+    """Locate the metadata XML file inside a ``.SAFE`` folder."""
     for root, dirs, files in os.walk(root_folder):
         for file in files:
             if file.startswith('MTD_MSIL') and file.endswith('.xml'):
@@ -179,6 +258,7 @@ def find_metadata_file(root_folder):
     raise FileNotFoundError("Metadata file not found.")
 
 def parse_metadata(metadata_path):
+    """Return the acquisition ``datetime`` parsed from the metadata file."""
     try:
         tree = ET.parse(metadata_path)
         root = tree.getroot()
@@ -205,6 +285,7 @@ def parse_metadata(metadata_path):
 
 
 def find_band_paths(root_folder):
+    """Return a mapping of band names to file paths within a ``.SAFE`` folder."""
     band_paths = {
         'B02': None, 'B03': None, 'B04': None,
         'B8A': None, 'B11': None, 'B12': None, 'B08': None
@@ -221,6 +302,7 @@ def find_band_paths(root_folder):
     return band_paths
 
 def process_sentinel_product(safe_folder, user_defined_threshold):
+    """Process a single ``.SAFE`` folder and update the global ``results`` list."""
     try:
         metadata_path = find_metadata_file(safe_folder)
         acquisition_date = parse_metadata(metadata_path)
@@ -271,6 +353,7 @@ def process_sentinel_product(safe_folder, user_defined_threshold):
     print(f"Processed {safe_folder}: Year {year}")
 
 def process_folder(folder_path, user_defined_threshold):
+    """Iterate over a folder of ``.SAFE`` products and process each."""
     print(f"Walking folder: {folder_path}")
     for file_name in os.listdir(folder_path):
         full_path = os.path.join(folder_path, file_name)
@@ -309,6 +392,7 @@ def process_folder(folder_path, user_defined_threshold):
 
 
 def export_results(results, output_folder):
+    """Write the ``results`` list to CSV and JSON files."""
     os.makedirs(output_folder, exist_ok=True)
 
     csv_path = os.path.join(output_folder, 'results.csv')
