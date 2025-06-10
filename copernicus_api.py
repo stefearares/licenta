@@ -4,6 +4,7 @@ import pandas as pd
 
 
 def get_access_token(username: str, password: str) -> str:
+    """Autentificare la Copernicus API returnand un token."""
     data = {
         "client_id": "cdse-public",
         "username": username,
@@ -46,14 +47,14 @@ if response.status_code == 200 and response.json().get('value'):
     if df.empty:
         print("Data frame empty.")
     else:
-        # Iterate through each product and download it
+
         for _, product in df.iterrows():
             product_id = product['Id']
             product_name = product['Name']
 
             print(f"Selected product: {product_name}")
 
-            # Download URL
+
             download_url = f"https://zipper.dataspace.copernicus.eu/odata/v1/Products({product_id})/$value"
 
             session = requests.Session()

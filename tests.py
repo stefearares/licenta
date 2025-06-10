@@ -1,24 +1,27 @@
 import sys
 import argparse
 import warnings
-
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_squared_error
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from pmdarima import auto_arima
+from statsmodels.tsa.stattools import adfuller, kpss
 
+"""Suprimarea avertizarilor produse de librarii."""
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 def aggregate_by_year(df, year_col):
+    """Grupeaza un dataframe in functie de ``year_col`` si calculeaza mean pentru fiecare an."""
     return df.groupby(year_col).mean().sort_index()
 
 
 def backtest(vals, window, model_func):
+    """Rolling window backtest folosind ``model_func`` pentru a prezice un pas."""
     actuals, preds = [], []
     for i in range(len(vals) - window):
         train = vals[i : i + window]
@@ -30,6 +33,7 @@ def backtest(vals, window, model_func):
 
 
 def fit_arima(train):
+    """Foloseste un model ARIMA(1,1,1) si prezice un pas."""
     m = ARIMA(train, order=(1,1,1),
               enforce_stationarity=False,
               enforce_invertibility=False).fit()
@@ -37,6 +41,7 @@ def fit_arima(train):
 
 
 def fit_sarima(train):
+    """Foloseste un model SARIMA(2,1,0)+trend  si prezice un pas."""
     m = SARIMAX(train, order=(2,1,0), trend='t',
                 enforce_stationarity=False,
                 enforce_invertibility=False).fit(disp=False)
@@ -44,17 +49,20 @@ def fit_sarima(train):
 
 
 def fit_auto(train):
+    """Foloseste un mode Auto-ARIMA si prezice un pas."""
     m = auto_arima(train, seasonal=False, suppress_warnings=True)
     return m.predict(n_periods=1)[0]
 
 
 def compute_metrics(actuals, preds):
+    """Return MAPE si RMSE intre arrays cu date reale si cele prezise."""
     mape = np.nanmean(np.abs((actuals - preds) / actuals)) * 100
     rmse = np.sqrt(mean_squared_error(actuals, preds))
     return round(mape,2), round(rmse,2)
 
 
 def holdout_evaluate(years, vals, train_until, test_until):
+    """Evalueaza variante ARIMA cu o perioada hold-out."""
 
     idx = {y: i for i, y in enumerate(years)}
     train_years = [y for y in years if y <= train_until]
@@ -97,16 +105,133 @@ def holdout_evaluate(years, vals, train_until, test_until):
     return res
 
 
+def test_stationarity(series, name=None):
+    """Foloseste teste ADF si KPSS pe ``series`` si returneaza rezultatele."""
+
+    series = np.array(series)
+    
+    # Sare peste daca sunt prea putine puncte
+    if len(series) < 8:
+        print(f"Series '{name}' has too few points for stationarity testing")
+        return {
+            'series': name,
+            'adf_stationary': None,
+            'kpss_stationary': None,
+            'adf_pvalue': None,
+            'kpss_pvalue': None
+        }
+    
+    result = {'series': name}
+    
+    # ADF Test
+    try:
+        adf_result = adfuller(series, autolag='AIC')
+        result['adf_statistic'] = round(adf_result[0], 4)
+        result['adf_pvalue'] = round(adf_result[1], 4)
+        # Daca p-value < 0.05, respingem ipoteza nula (serie stationara)
+        result['adf_stationary'] = result['adf_pvalue'] < 0.05
+        
+
+        result['adf_critical_values'] = {f'{key}%': round(val, 4) for key, val in adf_result[4].items()}
+    except Exception as e:
+        print(f"ADF Test failed for '{name}': {str(e)}")
+        result['adf_stationary'] = None
+        result['adf_pvalue'] = None
+    
+    # KPSS Test
+    try:
+        kpss_result = kpss(series, regression='c', nlags='auto')
+        result['kpss_statistic'] = round(kpss_result[0], 4)
+        result['kpss_pvalue'] = round(kpss_result[1], 4)
+        # Daca p-value > 0.05, nu putem respinge ipoteza nula (serie stationara)
+        result['kpss_stationary'] = result['kpss_pvalue'] > 0.05
+        
+
+        result['kpss_critical_values'] = {f'{key}%': round(val, 4) for key, val in kpss_result[3].items()}
+    except Exception as e:
+        print(f"KPSS Test failed for '{name}': {str(e)}")
+        result['kpss_stationary'] = None
+        result['kpss_pvalue'] = None
+    
+
+    if result.get('adf_stationary') and result.get('kpss_stationary'):
+        result['conclusion'] = "Series is stationary (both tests agree)"
+    elif not result.get('adf_stationary') and not result.get('kpss_stationary'):
+        result['conclusion'] = "Series is non-stationary (both tests agree)"
+    elif result.get('adf_stationary') and not result.get('kpss_stationary'):
+        result['conclusion'] = "Conflicting results: ADF says stationary, KPSS says non-stationary"
+    elif not result.get('adf_stationary') and result.get('kpss_stationary'):
+        result['conclusion'] = "Conflicting results: ADF says non-stationary, KPSS says stationary"
+    else:
+        result['conclusion'] = "Test results inconclusive"
+    
+    return result
+
+
+def analyze_stationarity(file_path, date_col=0):
+    """Primeste un path pentru un fisier CSV unde analizeaza stationaritatea."""
+    
+    try:
+        df = pd.read_csv(file_path)
+    except Exception as e:
+        print(f"Error reading CSV file: {e}")
+        return None
+    
+    year_col = df.columns[date_col]
+    data_cols = df.columns.drop(year_col)
+    df_grouped = df.groupby(year_col)[data_cols].mean().sort_index()
+    
+    results = []
+    for col in data_cols:
+        if 'user_defined' in col:
+            continue
+            
+        ts = df_grouped[col].astype(float)
+        if ts.size < 8:
+            print(f"Series '{col}' has too few points for stationarity testing, minimum 8 required")
+            continue
+            
+        values = ts.tolist()
+        result = test_stationarity(values, col)
+        
+        #  Diferentierea imbunatateste stationaritatea?
+        if not result.get('adf_stationary') or not result.get('kpss_stationary'):
+            diff_values = np.diff(values)
+            diff_result = test_stationarity(diff_values, f"{col} (1st diff)")
+            result['diff_conclusion'] = diff_result['conclusion']
+        
+        results.append(result)
+    
+
+    if results:
+        results_df = pd.DataFrame(results)
+
+        display_columns = ['series', 'adf_stationary', 'kpss_stationary', 
+                          'adf_pvalue', 'kpss_pvalue', 'conclusion']
+
+        if 'diff_conclusion' in results_df.columns:
+            display_columns.append('diff_conclusion')
+            
+        return results_df[display_columns]
+    else:
+        print("No series suitable for stationarity testing")
+        return None
+
+
+
 def main():
+    """Comenzile pentru rularea testelor"""
     p = argparse.ArgumentParser(
         description="Backtest rolling-window or hold-out evaluation for ARIMA, SARIMA, Auto-ARIMA"
     )
     p.add_argument("csv", help="path to your CSV")
-    p.add_argument("--window",   type=int, default=3, help="rolling window size")
+    p.add_argument("--window", type=int, default=3, help="rolling window size")
     p.add_argument("--train-until", type=int,
                    help="last year to include in training for hold-out")
-    p.add_argument("--test-until",  type=int,
+    p.add_argument("--test-until", type=int,
                    help="last year to forecast/test for hold-out")
+    p.add_argument("--test-stationarity", action="store_true",
+                   help="perform stationarity tests on time series")
     args = p.parse_args()
 
     try:
@@ -114,11 +239,23 @@ def main():
     except Exception as e:
         print(f"Error! CSV: {e}")
         sys.exit(1)
+        
+
+    if args.test_stationarity:
+        print("\n--- Stationarity Test Results ---")
+        stationarity_results = analyze_stationarity(args.csv)
+        if stationarity_results is not None:
+            print(stationarity_results)
+            print("\nNote about stationarity tests:")
+            print("ADF Test: H0 = non-stationary, p<0.05 means stationary")
+            print("KPSS Test: H0 = stationary, p>0.05 means stationary")
+            print("These results can help inform appropriate differencing order for ARIMA models.")
+        sys.exit(0)
 
     year_col = df.columns[0]
     out = []
 
-    # decide mode
+
     holdout_mode = args.train_until is not None and args.test_until is not None
 
     for col in df.columns.drop(year_col):

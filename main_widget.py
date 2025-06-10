@@ -9,6 +9,7 @@ from dialog_box import DialogBox
 
 class Widget(QWidget):
     def __init__(self):
+        """Main application widget containing the tables and controls."""
         super().__init__()
 
         # Left (Tables for NSI and NDESI)
@@ -74,6 +75,8 @@ class Widget(QWidget):
         self.layout.addLayout(self.right)  # Add controls and plotting on the right
 
     def check_and_load_images(self, directory):
+        """Validate that the directory contains all required bands and load
+        them using :func:`initialize_bands`. Returns ``None`` on failure."""
         required_bands = ['B02', 'B03', 'B04', 'B08', 'B11', 'B12', 'SWIR']
         band_paths = {}
 
@@ -121,6 +124,8 @@ class Widget(QWidget):
     import time
 
     def button_clicked(self):
+        """Callback for the *Add New Year* button which processes the selected
+        folder and populates the tables."""
         dlg = DialogBox()
         if dlg.exec():
             year = dlg.year_input.text().strip()
@@ -197,6 +202,8 @@ class Widget(QWidget):
         print("Selected rows deleted!")
 
     def toggle_buttons(self):
+        """Ensure that only one of the *Current* or *Future* buttons is active
+        and validate the forecast year input."""
         sender = self.sender()
 
         forecast_value = self.future_year.text().strip()

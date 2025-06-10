@@ -8,6 +8,7 @@ from prediction_model import *
 from prediction_modelv2 import *
 from prediction_model_auto_arima import *
 def processing_new_folder_with_safe_files():
+    """Prompt pentru un folder cu imagini ``.SAFE``,le proceseaza si exporta rezultatul in fisiere CSV/JSON."""
 
     app = QApplication(sys.argv)
     src = QFileDialog.getExistingDirectory(
@@ -48,6 +49,7 @@ def processing_new_folder_with_safe_files():
         print("Export canceled.")
 
 def gui_app():
+
     app = QApplication(sys.argv)
     widget = Widget()
     window = MainWindow(widget)
@@ -55,6 +57,7 @@ def gui_app():
     sys.exit(app.exec())
 
 def processing_normal_image():
+    """Testeaza analiza pe un set de imagini locale."""
     blue_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B02-Olt.jpg"  # Blue band
     red_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B04-Olt.jpg"  # Red band (or VRE if available)
     swir1_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\B11-Olt.jpg"  # SWIR1 band
@@ -101,6 +104,7 @@ def processing_normal_image():
     print("K pp threshold", pixel_count(desert_mask2))
 
 def process_csv_file_with_arima():
+    """ Predictie ARIMA vizuala pentru un fisier CSV."""
     app = QApplication(sys.argv)
     file_path, _ = QFileDialog.getOpenFileName(
         None,
@@ -126,6 +130,7 @@ def process_csv_file_with_arima():
     sys.exit(0)
 
 def process_csv_file_with_sarima():
+    """ Predictie SARIMA vizuala pentru un fisier CSV."""
     app = QApplication(sys.argv)
     file_path, _ = QFileDialog.getOpenFileName(
         None,
@@ -150,7 +155,7 @@ def process_csv_file_with_sarima():
 
     sys.exit(0)
 def plot_bar_evolution_arima(file_path: str):
-
+    """Ploteaza date istorice si predictia pentru serii folosind ARIMA."""
     results_dict = arima_for_all_columns(file_path)
     filtered = {k: v for k, v in results_dict.items() if 'user_defined' not in k}
     if not filtered:
@@ -192,6 +197,7 @@ def plot_bar_evolution_arima(file_path: str):
     plt.show()
 
 def plot_bar_evolution_sarima(file_path: str):
+    """Ploteaza date istorice si predictia pentru serii folosind SARIMA."""
     results_dict = sarima_for_all_columns(file_path)
     filtered = {k: v for k, v in results_dict.items() if 'user_defined' not in k}
     if not filtered:
@@ -243,7 +249,7 @@ def plot_bar_evolution_sarima(file_path: str):
     plt.show()
 
 def plot_bar_evolution_flow():
-
+    """GUI helper care cere un fisier CSV."""
     app = QApplication(sys.argv)
     csv_path, _ = QFileDialog.getOpenFileName(
         None,
@@ -255,15 +261,14 @@ def plot_bar_evolution_flow():
         QMessageBox.information(None, "No File", "No CSV selected.")
         sys.exit(0)
 
-    plot_bar_evolution_sarima(csv_path)
+    plot_bar_evolution_arima(csv_path)
     sys.exit(0)
 
 
-#De facut backtesting la arima cu datele actuale pe care le am
 if __name__ == '__main__':
-    # plot_bar_evolution_flow()
+     plot_bar_evolution_flow()
     # processing_normal_image()
     # processing_new_folder_with_safe_files()
     # process_csv_file_compare()
     # gui_app()
-    plot_bar_evolution_auto()
+    # plot_bar_evolution_auto()
