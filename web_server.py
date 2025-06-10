@@ -8,12 +8,22 @@ import io
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
+import requests
+import numpy as np
+import pandas as pd
+import warnings
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from pmdarima import auto_arima
+from statsmodels.tsa.stattools import adfuller, kpss
 from algoritmi_licenta import process_folder, export_results, results
 from prediction_model import arima_for_all_columns
 from tests import main as tests_main
-import pandas as pd
 from main import processing_normal_image, processing_new_folder_with_safe_files, plot_bar_evolution_sarima
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 app = Flask(__name__)
 
@@ -391,7 +401,7 @@ def process_safe_folder_with_export():
     try:
         folder_path = request.args.get('folder_path')
         threshold = request.args.get('threshold', default=75.0, type=float)
-        export_folder = request.args.get('export_folder')  # Optional export destination
+        export_folder = request.args.get('export_folder')
         
         if not folder_path:
             return jsonify({
@@ -564,7 +574,7 @@ def process_normal_images_hardcoded():
             }
         }
         
-        print("Processing completed successfully!")  # Debug log
+        print("Processing completed successfully!")
         return jsonify(results)
         
     except Exception as e:
@@ -572,6 +582,151 @@ def process_normal_images_hardcoded():
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "message": str(e)}), 500
+
+def aggregate_by_year(df, year_col):
+    return df.groupby(year_col).mean().sort_index()
+
+
+def test_stationarity(series, name=None):
+    series = np.array(series)
+    if len(series) < 8:
+        return {
+            'series': name,
+            'adf_stationary': None,
+            'kpss_stationary': None,
+            'adf_pvalue': None,
+            'kpss_pvalue': None,
+            'conclusion': 'Too few points'
+        }
+    result = {'series': name}
+    # ADF
+    try:
+        adf_res = adfuller(series, autolag='AIC')
+        result['adf_statistic'] = round(adf_res[0], 4)
+        result['adf_pvalue'] = round(adf_res[1], 4)
+        result['adf_stationary'] = result['adf_pvalue'] < 0.05
+    except:
+        result.update({'adf_statistic': None, 'adf_pvalue': None, 'adf_stationary': None})
+    # KPSS
+    try:
+        kpss_res = kpss(series, regression='c', nlags='auto')
+        result['kpss_statistic'] = round(kpss_res[0], 4)
+        result['kpss_pvalue'] = round(kpss_res[1], 4)
+        result['kpss_stationary'] = result['kpss_pvalue'] > 0.05
+    except:
+        result.update({'kpss_statistic': None, 'kpss_pvalue': None, 'kpss_stationary': None})
+    # Conclusion
+    adf = result.get('adf_stationary')
+    kpss_ = result.get('kpss_stationary')
+    if adf and kpss_:
+        result['conclusion'] = 'Stationary (both tests agree)'
+    elif adf is False and kpss_ is False:
+        result['conclusion'] = 'Non-stationary (both tests agree)'
+    elif adf and not kpss_:
+        result['conclusion'] = 'Conflicting: ADF stationary, KPSS non-stationary'
+    elif not adf and kpss_:
+        result['conclusion'] = 'Conflicting: ADF non-stationary, KPSS stationary'
+    else:
+        result['conclusion'] = 'Inconclusive'
+    return result
+
+
+def analyze_stationarity(file_path, date_col=0):
+    try:
+        df = pd.read_csv(file_path)
+    except Exception as e:
+        return None, str(e)
+    year_col = df.columns[date_col]
+    data_cols = df.columns.drop(year_col)
+    df_grp = df.groupby(year_col)[data_cols].mean().sort_index()
+    results = []
+    for col in data_cols:
+        ts = df_grp[col].dropna().astype(float).tolist()
+        r = test_stationarity(ts, col)
+        results.append(r)
+    return pd.DataFrame(results), None
+
+
+def get_access_token(username: str, password: str) -> str:
+    data = {
+        "client_id": "cdse-public",
+        "username": username,
+        "password": password,
+        "grant_type": "password",
+    }
+    r = requests.post(
+        "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
+        data=data,
+    )
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+@app.route('/')
+def home():
+    return jsonify({
+        "endpoints": list(app.url_map.iter_rules())
+    })
+
+@app.route('/test-stationarity')
+def test_stationarity_endpoint():
+    csv_path = request.args.get('csv_path')
+    if not csv_path or not os.path.exists(csv_path):
+        return jsonify({"status": "error", "message": "Valid csv_path is required"}), 400
+    df_res, err = analyze_stationarity(csv_path)
+    if err:
+        return jsonify({"status": "error", "message": err}), 500
+    if df_res.empty:
+        return jsonify({"status": "success", "results": []})
+    return jsonify({"status": "success", "results": df_res.to_dict(orient='records')}), 200
+
+@app.route('/copernicus-search', methods=['POST'])
+def copernicus_search():
+    data = request.get_json() or {}
+    username = data.get('username')
+    password = data.get('password')
+    start_date = data.get('start_date')
+    end_date = data.get('end_date')
+    aoi = data.get('aoi')
+    top = data.get('top', '20')
+    cloud = data.get('cloud_cover_threshold', '10.0')
+    if not all([username, password, start_date, end_date, aoi]):
+        return jsonify({"status": "error", "message": "Missing required parameters"}), 400
+    try:
+        token = get_access_token(username, password)
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 401
+    filter_str = (
+        "Collection/Name eq 'SENTINEL-2' and "
+        f"Attributes/OData.CSC.DoubleAttribute/any(att:att/Name eq 'cloudCover' and att/OData.CSC.DoubleAttribute/Value le {cloud}) and "
+        f"ContentDate/Start gt {start_date} and ContentDate/Start lt {end_date} and "
+        f"OData.CSC.Intersects(area=geography'SRID=4326;{aoi}')"
+    )
+    search_url = (
+        "https://catalogue.dataspace.copernicus.eu/odata/v1/Products?$filter="
+        + filter_str + f"&$top={top}"
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    r = requests.get(search_url, headers=headers)
+    if r.status_code != 200:
+        return jsonify({"status": "error", "message": r.text}), r.status_code
+    vals = r.json().get('value', [])
+    products = []
+    session = requests.Session()
+    session.headers.update(headers)
+    for prod in vals:
+        pid = prod.get('Id')
+        name = prod.get('Name')
+        download_url = f"https://zipper.dataspace.copernicus.eu/odata/v1/Products({pid})/$value"
+        try:
+            dr = session.get(download_url, stream=True)
+            fname = f"{name}.zip"
+            with open(fname, 'wb') as f:
+                for chunk in dr.iter_content(8192):
+                    f.write(chunk)
+            products.append({"id": pid, "name": name, "downloaded": True, "file": fname})
+        except Exception as ex:
+            products.append({"id": pid, "name": name, "downloaded": False, "error": str(ex)})
+    return jsonify({"status": "success", "products": products})
 
 if __name__ == '__main__':
     print("Starting Flask server with PySide6...")
