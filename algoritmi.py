@@ -108,27 +108,6 @@ def compute_ndesi(blue_array, red_array, swir1_array, swir2_array):
 
     return ndesi
 
-
-
-def compute_ndwi(green_array, nir_array):
-    ndwi_index = (green_array - nir_array) / (green_array + nir_array)
-    ndwi_array = np.where(ndwi_index > 0, 1, 0)
-    return ndwi_array
-
-
-
-def compute_wi(swir_array, nir_array):
-    wi_index = (nir_array + swir_array) / 2
-    wi_array = np.where(wi_index > 0, 1, 0)
-    return wi_array
-
-
-def ndesi_minus_ndwi(ndwi_array, binary_ndesi):
-    """Scoate pixelii cu apa din masca NDESI."""
-    final_mask = np.where(ndwi_array == 0, 1, binary_ndesi)
-    return final_mask
-
-
 def normalize_arrays(index_array):
     """Normalizeaza un array la ``0-255`` pentru vizualizare sau clustering."""
     normalized_index = ((index_array - np.min(index_array)) / (np.max(index_array) - np.min(index_array)) * 255).astype(
