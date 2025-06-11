@@ -30,25 +30,6 @@ app = Flask(__name__)
 SAFE_FOLDER_PATH = None
 CSV_FILE_PATH = None
 
-@app.route('/')
-def home():
-    endpoints = {
-        "endpoints": {
-            "/": "This help page",
-            "/health": "Health check endpoint",
-            "/process-images": "Process normal satellite images and return analysis results",
-            "/process-images-real": "Actually process satellite images from specified folder",
-            "/process-normal-images-hardcoded": "Process normal images with hardcoded paths (your specific Sentinel-2 images)",
-            "/process-safe-folder": "Process .SAFE folder with user-defined threshold",
-            "/process-safe-folder-with-export": "Process .SAFE folder and optionally export results",
-            "/plot-bar-evolution": "Generate bar evolution plot from CSV data",
-            "/compare-csv": "Compare CSV file data using ARIMA models",
-            "/set-safe-folder": "Set the .SAFE folder path for processing",
-            "/set-csv-file": "Set the CSV file path for analysis"
-        }
-    }
-    return jsonify(endpoints)
-
 @app.route('/health')
 def health():
     return jsonify({"status": "healthy", "message": "Server is running"})
@@ -464,8 +445,7 @@ def process_normal_images_hardcoded():
         swir_band_path = "C:\\Users\\rares\\OneDrive\\Desktop\\Sentinel-2\\SWIR-Olt.jpg"
         
         print("Checking file paths...")
-        
-        # Check if all files exist
+
         band_paths = {
             "blue": blue_band_path,
             "red": red_band_path, 
@@ -492,8 +472,7 @@ def process_normal_images_hardcoded():
             }), 400
         
         print("All files found, importing functions...")
-        
-        # Import processing functions
+
         from algoritmi_licenta import (
             initialize_bands, compute_nsi, compute_ndesi, normalize_arrays,
             create_binary_image_mean_threshold, kmeans_clustering_random_centers,
@@ -599,7 +578,7 @@ def test_stationarity(series, name=None):
             'conclusion': 'Too few points'
         }
     result = {'series': name}
-    # ADF
+
     try:
         adf_res = adfuller(series, autolag='AIC')
         result['adf_statistic'] = round(adf_res[0], 4)
@@ -607,7 +586,6 @@ def test_stationarity(series, name=None):
         result['adf_stationary'] = result['adf_pvalue'] < 0.05
     except:
         result.update({'adf_statistic': None, 'adf_pvalue': None, 'adf_stationary': None})
-    # KPSS
     try:
         kpss_res = kpss(series, regression='c', nlags='auto')
         result['kpss_statistic'] = round(kpss_res[0], 4)
@@ -615,7 +593,6 @@ def test_stationarity(series, name=None):
         result['kpss_stationary'] = result['kpss_pvalue'] > 0.05
     except:
         result.update({'kpss_statistic': None, 'kpss_pvalue': None, 'kpss_stationary': None})
-    # Conclusion
     adf = result.get('adf_stationary')
     kpss_ = result.get('kpss_stationary')
     if adf and kpss_:
