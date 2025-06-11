@@ -1,8 +1,5 @@
-from flask import Flask, request, jsonify, send_file
-import tempfile
+from flask import Flask, request, jsonify
 import os
-import sys
-import json
 import base64
 import io
 import matplotlib
@@ -12,14 +9,9 @@ import requests
 import numpy as np
 import pandas as pd
 import warnings
-from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-from pmdarima import auto_arima
 from statsmodels.tsa.stattools import adfuller, kpss
-from algoritmi_licenta import process_folder, export_results, results
-from arima_model import arima_for_all_columns
-from tests import main as tests_main
-from main import processing_normal_image, processing_new_folder_with_safe_files, plot_bar_evolution_sarima
+from algoritmi import process_folder, export_results, results
+from modele.arima_model import arima_for_all_columns
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -294,7 +286,7 @@ def process_images_real():
                 "message": f"Image folder does not exist: {image_folder}"
             }), 400
         
-        from algoritmi_licenta import (
+        from algoritmi import (
             initialize_bands, compute_nsi, compute_ndesi, normalize_arrays,
             create_binary_image_mean_threshold, kmeans_clustering_random_centers,
             kmeans_clustering_pp_centers, create_binary_image_otsu_threshold,
@@ -473,7 +465,7 @@ def process_normal_images_hardcoded():
         
         print("All files found, importing functions...")
 
-        from algoritmi_licenta import (
+        from algoritmi import (
             initialize_bands, compute_nsi, compute_ndesi, normalize_arrays,
             create_binary_image_mean_threshold, kmeans_clustering_random_centers,
             kmeans_clustering_pp_centers, create_binary_image_otsu_threshold,

@@ -1,10 +1,9 @@
 import sys
-from PySide6.QtWidgets import QApplication
-from algoritmi_licenta import *
-from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
-from arima_model import *
-from sarima_model import *
-from auto_arima_model import *
+from algoritmi import *
+from PySide6.QtWidgets import QInputDialog, QMessageBox
+from modele.arima_model import *
+from modele.sarima_model import *
+from modele.auto_arima_model import *
 def processing_new_folder_with_safe_files():
     """Prompt pentru un folder cu imagini ``.SAFE``,le proceseaza si exporta rezultatul in fisiere CSV/JSON."""
 
