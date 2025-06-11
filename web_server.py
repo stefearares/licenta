@@ -17,7 +17,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from pmdarima import auto_arima
 from statsmodels.tsa.stattools import adfuller, kpss
 from algoritmi_licenta import process_folder, export_results, results
-from prediction_model import arima_for_all_columns
+from arima_model import arima_for_all_columns
 from tests import main as tests_main
 from main import processing_normal_image, processing_new_folder_with_safe_files, plot_bar_evolution_sarima
 

@@ -1,12 +1,10 @@
 import sys
 from PySide6.QtWidgets import QApplication
 from algoritmi_licenta import *
-from main_window import MainWindow
-from main_widget import Widget
 from PySide6.QtWidgets import QApplication, QFileDialog, QInputDialog, QMessageBox
-from prediction_model import *
-from prediction_modelv2 import *
-from prediction_model_auto_arima import *
+from arima_model import *
+from sarima_model import *
+from auto_arima_model import *
 def processing_new_folder_with_safe_files():
     """Prompt pentru un folder cu imagini ``.SAFE``,le proceseaza si exporta rezultatul in fisiere CSV/JSON."""
 
@@ -47,14 +45,6 @@ def processing_new_folder_with_safe_files():
         export_results(results, dest)
     else:
         print("Export canceled.")
-
-def gui_app():
-
-    app = QApplication(sys.argv)
-    widget = Widget()
-    window = MainWindow(widget)
-    window.show()
-    sys.exit(app.exec())
 
 def processing_normal_image():
     """Testeaza analiza pe un set de imagini locale."""
@@ -266,9 +256,8 @@ def plot_bar_evolution_flow():
 
 
 if __name__ == '__main__':
-     plot_bar_evolution_flow()
+    # plot_bar_evolution_flow()
     # processing_normal_image()
     # processing_new_folder_with_safe_files()
-    # process_csv_file_compare()
     # gui_app()
-    # plot_bar_evolution_auto()
+     plot_bar_evolution_auto()
