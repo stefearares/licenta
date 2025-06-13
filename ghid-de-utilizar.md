@@ -20,7 +20,7 @@ python web_server.py
 - `GET  /health` – Health check  
 - `GET  /process-images` – Procesare imagini satelitare (simulare)  
 - `GET  /process-images-real` – Process imagini satelitare (real)  
-- `GET  /process-normal-images-hardcoded` – Proceseaza setul de test  
+- `GET  /process-normal-images-hardcoded` – Proceseaza setul hardcoded în funcție 
 - `GET  /process-safe-folder` – Proceseaza un .SAFE folder
 - `GET  /plot-bar-evolution` – Genereaza bar-evolution plot  
 - `GET  /compare-csv` – Analiză ARIMA  
